@@ -66,7 +66,7 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log && pactive_lop) {
       // TODO: check if having separate logs is better?
-			active_log->all_filter_log.push_back(pactive_lop->children[0]->out_start);
+			active_log->all_filter_log.emplace_back(pactive_lop->children[0]->out_start);
       active_log->SetLatestLSN({active_log->all_filter_log.size(), result_count});
 		}
 #endif
@@ -75,12 +75,10 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 	} else {
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log && pactive_lop && result_count) {
-			active_log->filter_log.emplace_back();
-			active_log->filter_log.back().sel = (sel_t*) malloc(result_count * sizeof(sel_t));
-			active_log->filter_log.back().count = result_count;
-			active_log->filter_log.back().in_start = pactive_lop->children[0]->out_start;
+			sel_t* sel = (sel_t*) malloc(result_count * sizeof(sel_t));
+			memcpy(sel, state.sel.data(),  result_count * sizeof(sel_t));
+			active_log->filter_log.emplace_back(sel, result_count, pactive_lop->children[0]->out_start);
       active_log->SetLatestLSN({active_log->filter_log.size(), 0});
-			memcpy(active_log->filter_log.back().sel, state.sel.data(),  result_count * sizeof(sel_t));
 		}
 #endif
 		chunk.Slice(input, state.sel, result_count);

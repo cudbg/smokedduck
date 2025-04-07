@@ -86,7 +86,7 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
 
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log && key_count) {
-		active_log->perfect_full_scan_ht_log.push_back({sel_build.sel_data(), sel_tuples.sel_data(), move(tuples_addresses.GetBuffer()), key_count, ht.Count()});
+		active_log->perfect_full_scan_ht_log.emplace_back(sel_build.sel_data(), sel_tuples.sel_data(), move(tuples_addresses.GetBuffer()), key_count, ht.Count());
 	}
 #endif
 	return true;
@@ -215,7 +215,7 @@ OperatorResultType PerfectHashJoinExecutor::ProbePerfectHashTable(ExecutionConte
       memcpy(left, state.probe_sel_vec.data(), probe_sel_count*sizeof(sel_t));
     }
    // std::cout << active_lop->operator_id << " perfect " << probe_sel_count << " " << active_lop->out_start << std::endl;
-    active_log->perfect_probe_ht_log.push_back({left, right, probe_sel_count, pactive_lop->children[0]->out_start});
+    active_log->perfect_probe_ht_log.emplace_back(left, right, probe_sel_count, pactive_lop->children[0]->out_start);
     active_log->SetLatestLSN({active_log->perfect_probe_ht_log.size(), 2});
 	}
 #endif

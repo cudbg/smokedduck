@@ -560,9 +560,9 @@ void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const DataCh
       if (append_sel.data()) {
         sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t) * append_count);
 		    memcpy(sel_copy, append_sel.data(),  append_count * sizeof(sel_t));
-			  active_log->scatter_sel_log.push_back({addresses_copy, sel_copy, append_count, pactive_lop->children[1]->out_start});
+			  active_log->scatter_sel_log.emplace_back(addresses_copy, sel_copy, append_count, pactive_lop->children[1]->out_start);
       } else {
-			  active_log->scatter_sel_log.push_back({addresses_copy, nullptr, append_count, pactive_lop->children[1]->out_start});
+			  active_log->scatter_sel_log.emplace_back(addresses_copy, nullptr, append_count, pactive_lop->children[1]->out_start);
       }
 		}
 #endif

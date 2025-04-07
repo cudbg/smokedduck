@@ -253,12 +253,10 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
 	VectorOperations::AddInPlace(state.addresses, NumericCast<int64_t>(layout.GetAggrOffset()), payload.size());
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log) {
-		active_log->scatter_log.emplace_back();
 		auto ptrs = FlatVector::GetData<data_ptr_t>(state.addresses);
     data_ptr_t* a  = new data_ptr_t[groups.size()];
 	  memcpy(a, ptrs, groups.size() * sizeof(data_ptr_t));
-		active_log->scatter_log.back().addresses = a;
-    active_log->scatter_log.back().count = groups.size();
+		active_log->scatter_log.emplace_back(a, groups.size());
     // TODO: capture child.out_start
 	}
 #endif

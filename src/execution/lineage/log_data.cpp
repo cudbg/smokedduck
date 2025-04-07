@@ -39,6 +39,15 @@ namespace duckdb {
       delete perfect_probe_ht_log[i].right;
       delete perfect_probe_ht_log[i].left;
     }
+    
+    for (int i=0; i < finalize_states_log.size(); ++i) {
+      delete finalize_states_log[i].addresses;
+    }
+    
+    for (int i=0; i < combine_log.size(); ++i) {
+      delete combine_log[i].src;
+      delete combine_log[i].target;
+    }
   }
 } // namespace duckdb
 #endif

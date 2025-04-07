@@ -508,7 +508,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			}
 #ifdef LINEAGE
 			if (lineage_manager->capture && active_log) {
-				active_log->row_group_log.push_back({nullptr, count, this->start, current_row});
+				active_log->row_group_log.emplace_back(nullptr, count, this->start, current_row);
 			}
 #endif
 		} else {
@@ -589,7 +589,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			if (lineage_manager->capture && active_log) {
 			  sel_t* sel_copy = new sel_t[count];
 			  memcpy(sel_copy, sel.data(),  count * sizeof(sel_t));
-				active_log->row_group_log.push_back({sel_copy, approved_tuple_count, this->start, current_row});
+				active_log->row_group_log.emplace_back(sel_copy, approved_tuple_count, this->start, current_row);
 			}
 #endif
 		}

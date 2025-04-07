@@ -30,7 +30,7 @@ void OperatorLineage::PostProcess() {
       for (int k=0; k < log[tkey]->finalize_states_log.size(); ++k) {
         idx_t res_count = log[tkey]->finalize_states_log[k].count;
         //std::cout << count_so_far+res_count << " finalize states: " << tkey << " " << log[tkey]->finalize_states_log.size() << std::endl;
-        auto payload = log[tkey]->finalize_states_log[k].addresses.get();
+        auto payload = log[tkey]->finalize_states_log[k].addresses;
         for (idx_t j=0; j < res_count; ++j) {
           if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
             log_index->codes[payload[j]] = j + count_so_far;
@@ -50,8 +50,8 @@ void OperatorLineage::PostProcess() {
       //std::cout << "combine states: " << log[tkey]->combine_log.size() << std::endl;
       for (int k=log[tkey]->combine_log.size()-1; k >= 0; --k) {
         idx_t res_count = log[tkey]->combine_log[k].count;
-        auto src = log[tkey]->combine_log[k].src.get();
-        auto target = log[tkey]->combine_log[k].target.get();
+        auto src = log[tkey]->combine_log[k].src;
+        auto target = log[tkey]->combine_log[k].target;
         for (idx_t j=0; j < res_count; ++j) {
           //std::cout << res_count << " combine: " << j << " " << log_index->codes[src[j]] << " " << log_index->codes[target[j]]  << " " << (void*)src[j] << " " << (void*)target[j] << std::endl;
           log_index->codes[src[j]] = log_index->codes[target[j]];

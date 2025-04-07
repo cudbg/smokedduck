@@ -65,8 +65,8 @@ void OuterJoinMarker::ConstructLeftJoinResult(DataChunk &left, DataChunk &result
 		}
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log && pactive_lop) {
-      active_log->nlj_log.push_back({move(remaining_sel.sel_data()->owned_data), nullptr, remaining_count, 
-           0, pactive_lop->children[0]->out_start});
+      active_log->nlj_log.emplace_back(move(remaining_sel.sel_data()->owned_data), nullptr, remaining_count, 
+           0, pactive_lop->children[0]->out_start);
       // TODO: add latest
     }
 #endif

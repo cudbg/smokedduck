@@ -4,9 +4,9 @@
 #include "duckdb/common/types/row/tuple_data_iterator.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 
-#ifdef LINEAGE
-#include "duckdb/execution/lineage/lineage_manager.hpp"
-#endif
+//#ifdef LINEAGE
+//#include "duckdb/execution/lineage/lineage_manager.hpp"
+//#endif
 
 namespace duckdb {
 

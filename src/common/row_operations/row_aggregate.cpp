@@ -84,16 +84,14 @@ void RowOperations::CombineStates(RowOperationsState &state, TupleDataLayout &la
 
 #ifdef LINEAGE
 	if (lineage_manager->capture && active_log) {
-		active_log->combine_log.emplace_back();
-		active_log->combine_log.back().count = count;
-
-		active_log->combine_log.back().src = unique_ptr<data_ptr_t[]>(new data_ptr_t[count]);
+		data_ptr_t* src = new data_ptr_t[count];
     auto src_ptrs = FlatVector::GetData<data_ptr_t>(sources);
-    memcpy(active_log->combine_log.back().src.get(), src_ptrs, count * sizeof(data_ptr_t));
+    memcpy(src, src_ptrs, count * sizeof(data_ptr_t));
 
 		auto target_ptrs = FlatVector::GetData<data_ptr_t>(targets);
-		active_log->combine_log.back().target = unique_ptr<data_ptr_t[]>(new data_ptr_t[count]);
-    memcpy(active_log->combine_log.back().target.get(), target_ptrs, count * sizeof(data_ptr_t));
+	  data_ptr_t* target = new data_ptr_t[count];
+    memcpy(target, target_ptrs, count * sizeof(data_ptr_t));
+		active_log->combine_log.emplace_back(src, target, count);
 	}
 #endif
 
@@ -131,11 +129,10 @@ void RowOperations::FinalizeStates(RowOperationsState &state, TupleDataLayout &l
 	VectorOperations::AddInPlace(addresses_copy, UnsafeNumericCast<int64_t>(layout.GetAggrOffset()), result.size());
 #ifdef LINEAGE
 	if (lineage_manager->capture && active_log) {
-		active_log->finalize_states_log.emplace_back();
-		active_log->finalize_states_log.back().count = result.size();
-		active_log->finalize_states_log.back().addresses = unique_ptr<data_ptr_t[]>(new data_ptr_t[result.size()]);
     auto ptrs = FlatVector::GetData<data_ptr_t>(addresses_copy);
-    memcpy(active_log->finalize_states_log.back().addresses.get(), ptrs, result.size() * sizeof(data_ptr_t));
+		data_ptr_t* addresses = new data_ptr_t[result.size()];
+    memcpy(addresses, ptrs, result.size() * sizeof(data_ptr_t));
+		active_log->finalize_states_log.emplace_back(addresses, result.size());
 	}
 #endif
 

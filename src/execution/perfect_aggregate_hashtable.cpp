@@ -134,13 +134,11 @@ void PerfectAggregateHashTable::AddChunk(DataChunk &groups, DataChunk &payload) 
 	if (lineage_manager->capture && active_log) {
     active_log->tuple_size = tuple_size;
     active_log->fixed = uintptr_t(data);
-		active_log->int_scatter_log.emplace_back();
     int* a = (int*) malloc(groups.size() * sizeof(int));
-    active_log->int_scatter_log.back().addresses = a;
-    active_log->int_scatter_log.back().count = groups.size();
     for (idx_t i = 0; i < groups.size(); i++) {
       a[i] = address_data[i];
     }
+		active_log->int_scatter_log.emplace_back(a, groups.size());
   }
 #endif
 

@@ -416,8 +416,8 @@ OperatorResultType PhysicalNestedLoopJoin::ResolveComplexJoin(ExecutionContext &
 			chunk.Slice(right_payload, rvector, match_count, input.ColumnCount());
 #ifdef LINEAGE
       if (lineage_manager->capture && active_log && pactive_lop) {
-        active_log->nlj_log.push_back({move(lvector.sel_data()->owned_data), move(rvector.sel_data()->owned_data), match_count, 
-             state.condition_scan_state.current_row_index, pactive_lop->children[0]->out_start});
+        active_log->nlj_log.emplace_back(move(lvector.sel_data()->owned_data), move(rvector.sel_data()->owned_data), match_count, 
+             state.condition_scan_state.current_row_index, pactive_lop->children[0]->out_start);
         active_log->latest.first = active_log->nlj_log.size();
       }
 #endif

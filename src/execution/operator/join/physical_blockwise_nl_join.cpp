@@ -173,7 +173,7 @@ OperatorResultType PhysicalBlockwiseNLJoin::ExecuteInternal(ExecutionContext &co
       if (lineage_manager->capture && active_log) {
         sel_t* sel_copy = new sel_t[result_count];
         memcpy(sel_copy, state.match_sel.data(), result_count*sizeof(sel_t));
-        active_log->bnlj_log.push_back({sel_copy, result_count});
+        active_log->bnlj_log.emplace_back(sel_copy, result_count);
         active_log->SetLatestLSN({active_log->bnlj_log.size(), 0});
       }
 #endif

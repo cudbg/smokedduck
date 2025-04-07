@@ -56,8 +56,8 @@ agg_results = []
 ############################################
 
 if run_filter:
-    selectivity = [0.5] #0.02, 0.2, 0.5, 1.0]
-    cardinality = [10] #1000000, 5000000, 10000000]
+    selectivity = [0.02, 0.2, 0.5, 1.0]
+    cardinality = [1000000, 5000000, 10000000]
     setting = [False, True]
     for pushdown in setting:
         for r in range(args.repeat):
