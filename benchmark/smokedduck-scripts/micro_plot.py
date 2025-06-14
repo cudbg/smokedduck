@@ -1,6 +1,7 @@
 from itertools import product
 import json
 import pandas as pd
+# exp_20250603_0013
 import argparse
 from pygg import *
 import duckdb
@@ -282,9 +283,9 @@ if plot_join:
     
 if plot_ineq:
     # plot |T1| = 1K and |T2| = 1M
-    where = f"WHERE overheadType<>'Execute' and op_name<>'CROSS_PRODUCT' and n2=1000000 {cond}"
+    where = f"WHERE overheadType<>'Execute' and n2=1000000 {cond} and  op_name IN ('BLOCKWISE_NL_JOIN', 'PIECEWISE_MERGE_JOIN', 'NESTED_LOOP_JOIN')"
     data  = con.execute(template.format(g, g, g, where)).fetchdf()
-    d = { "BLOCKWISE_NL_JOIN": "BNL", "PIECEWISE_MERGE_JOIN": "Merge", "NESTED_LOOP_JOIN": "NL"}
+    d = { "BLOCKWISE_NL_JOIN": "BNL", "PIECEWISE_MERGE_JOIN": "Merge", "NESTED_LOOP_JOIN": "NL", "CROSS_PRODUCT": "CROSS", "HASH_JOIN": "HJ"}
     data['op_label'] = data['op_name'].apply(d.get)
     system_d = { "SmokedDuck": "SD", "Perm": "Logical"}
     data['sys_label'] = data['system'].apply(system_d.get)
@@ -292,7 +293,7 @@ if plot_ineq:
     # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
     for idx, y_axis in enumerate(y_axis_list):
         x_axis, x_label, color, facet = "sel", "Sel", "sys_label", "~op_label"
-        x_type, y_type, y_label = "continuous",  "continuous", "{}".format(y_header[idx])
+        x_type, y_type, y_label = "continuous",  "log10", "{} [log]".format(y_header[idx])
         fname, w, h = f"micro_{y_axis}_line_1M_1k_ineq.png", 7, 2.5
         PlotLines(data, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, None)
 
@@ -317,6 +318,14 @@ if plot_ineq:
                     avg(roverhead), max(roverhead), min(roverhead)
                     from data {scond} group by overheadtype, system, op_name,  n1, sel
                     order by overheadtype, system, op_name, n1, sel
+                    """).df()
+            print(summary)
+            
+            summary = con.execute(f"""select overheadtype, system, op_name,
+                    avg(overhead), max(overhead), min(overhead),
+                    avg(roverhead), max(roverhead), min(roverhead)
+                    from data {scond} group by overheadtype, system, op_name
+                    order by overheadtype, system, op_name
                     """).df()
             print(summary)
     
@@ -344,6 +353,13 @@ if plot_ineq:
                     """).df()
             print(summary)
 
+            summary = con.execute(f"""select overheadtype, system, op_name, 
+                    avg(overhead), max(overhead), min(overhead),
+                    avg(roverhead), max(roverhead), min(roverhead)
+                    from data {scond} group by overheadtype, system, op_name
+                    order by overheadtype, system, op_name
+                    """).df()
+            print(summary)
 if plot_join_mtn:
     op_names = ["HASH_JOIN_mtm", "HASH_JOIN_mtmvarchar_"]
     for op_name in op_names:
@@ -420,12 +436,12 @@ if plot_agg:
     sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
     print(con.execute("select * from data where system='Perm'").df())
 
-    sample_data_10m = con.execute("select * from sample_data where card=10000000 and op_name<>'HASH_GROUP_BY' and system<>'Perm_list'").df()
+    sample_data_10m = con.execute("select * from sample_data where card=10000000 and op_name<>'HASH_GROUP_BY' and system<>'Perm_list' and system<>'Smoke'").df()
     d = { "PERFECT_HASH_GROUP_BY": "PERFECT HASH GROUP BY", "HASH_GROUP_BY_var": "HASH GROUP BY", "HASH_GROUP_BY": "HASH GROUP BY"}
     sample_data_10m['op_label'] = sample_data_10m['op_name'].apply(d.get)
     sample_data_10m['card'] = sample_data_10m['card'].apply(lambda v: v / 1000000)
     # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
-    system_d = { "SmokedDuck": "This work", "Perm": "Logical", "Smoke": "Smoke"}
+    system_d = { "SmokedDuck": "SD", "Perm": "Logical", "Smoke": "Smoke"}
     sample_data_10m['sys_label'] = sample_data_10m['system'].apply(system_d.get)
     sample_data_10m_10 = con.execute("select * from sample_data_10m where groups=10 and op_name='PERFECT_HASH_GROUP_BY' and overheadtype='Total'").df()
     print(sample_data_10m_10)
@@ -439,6 +455,11 @@ if plot_agg:
         x_axis, x_label, color, facet = "groups", "Groups (g)", "sys_label", "~card~op_label"
         labeller="labeller(card=function(x)paste('# Tuples:',x,'M',sep=''))"
         x_type, y_type, y_label = "log10", "log10", "{} [log]".format(y_header[idx])
+        xkwargs=None # dict(breaks=[10,100,1000], labels=list(map(esc,['10','100','1000'])))
+        fname, w, h = "micro_{}_10M_line_log_reg_agg.png".format(y_axis), 8, 2.5
+        PlotLines(sample_data_10m, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, xkwargs, labeller)
+        
+        x_type, y_type, y_label = "log10", "continuous", "{}".format(y_header[idx])
         xkwargs=None # dict(breaks=[10,100,1000], labels=list(map(esc,['10','100','1000'])))
         fname, w, h = "micro_{}_10M_line_reg_agg.png".format(y_axis), 8, 2.5
         PlotLines(sample_data_10m, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, xkwargs, labeller)
@@ -469,3 +490,11 @@ if plot_agg:
                 order by overheadtype, system, op_name, card, groups
                 """).df()
         print(summary)
+    summary = con.execute(f"""select overheadtype, system, op_name,
+            avg(overhead), max(overhead), min(overhead),
+            avg(roverhead), max(roverhead), min(roverhead)
+            from data
+            group by overheadtype, system, op_name
+            order by overheadtype, system, op_name
+            """).df()
+    print(summary)
