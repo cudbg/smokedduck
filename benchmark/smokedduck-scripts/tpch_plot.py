@@ -1,3 +1,4 @@
+# check q3, q10, q16, q21, 
 import json
 import pandas as pd
 import argparse
@@ -24,13 +25,19 @@ parser.add_argument('--db', type=str, help='queries folder', default='tpch_bench
 args = parser.parse_args()
 
 
+con = duckdb.connect("tpch_benchmark_capture_exp_20250602_0914.db")
+windows_df = con.execute("select * from tpch_capture").df()
+
 con = duckdb.connect(args.db)
 con.create_function("getMat", getMat, [VARCHAR], FLOAT)
 con.create_function("getAllExec", getAllExec, [VARCHAR], FLOAT)
 con.create_function("cat", cat, [BIGINT], VARCHAR)
 print(con.execute("select * from tpch_capture").df())
+tpch_union = con.execute("select * from windows_df UNION ALL select * from tpch_capture").df()
+
 tpch_df = con.execute("""select *, cat(query) as qtype, getMat(plan_timings) as mat_time, getAllExec(plan_timings) as plan_runtime
-    from tpch_capture""").df()
+    from tpch_union""").df()
+
 tpch_opt = con.execute("""select * from tpch_df
                     where lineage_type='Logical-RID'
                           and query not in (select query from tpch_df where lineage_type='Logical-OPT')
@@ -119,7 +126,7 @@ template = f"""
     {mktemplate('Execute', 'exec_', 'tpch_metrics')}
   ) SELECT * FROM temp {"{}"} ORDER BY overheadType desc """
 
-where = f"where overheadtype<>'Materialize' and n_threads=1"
+where = f"where overheadtype='Total' and n_threads=1"
 q = template.format(where)
 print(q)
 data = con.execute(q).fetchdf()
@@ -145,7 +152,8 @@ if 1:
         ggsave("figures/tpch_{}.png".format(y_axis), p, postfix=postfix,  width=14, height=6, scale=0.8)
 
         # TODO: plot sf=20
-        p = ggplot(data_sf, aes(x='qid', ymin=0, ymax=y_axis,  y=y_axis, color='system', fill='system', group='system', shape='overheadType'))
+        #p = ggplot(data_sf, aes(x='qid', ymin=0, ymax=y_axis,  y=y_axis, color='system', fill='system', group='system', shape='overheadType'))
+        p = ggplot(data_sf, aes(x='qid', ymin=0, ymax=y_axis,  y=y_axis, color='system', fill='system', group='system'))
         p += geom_point(stat=esc('identity'), alpha=0.8, position=position_dodge(width=0.8), width=0.5, size=2)
         p += geom_linerange(stat=esc('identity'), alpha=0.8, position=position_dodge(width=0.8), width=0.8)
         if y_axis == 'overhead':
@@ -153,11 +161,11 @@ if 1:
         else:
             p += axis_labels('Query', "{} (log)".format(header[idx]), "discrete", "log10", ykwargs=dict(breaks=[20, 100, 1000], labels=list(map(esc, ['20', '100', '1000']))))
             p += geom_hline(aes(yintercept=20, linetype=esc("dotted")))
-            p += geom_hline(aes(yintercept=10, linetype=esc("dotted")))
+            #p += geom_hline(aes(yintercept=10, linetype=esc("dotted")))
         p += legend_side
         p += facet_grid(".~qtype", scales=esc("free_x"), space=esc("free_x"))
         postfix = """data$qid= factor(data$qid, levels=c({}))""".format(queries_order)
-        ggsave("figures/tpch_sample_{}.png".format(y_axis), p, postfix=postfix,  width=14, height=2.5, scale=0.8)
+        ggsave("figures/tpch_sample_{}.png".format(y_axis), p, postfix=postfix,  width=14, height=3, scale=0.8)
     
 q = f"""
 select lineage_type, sf, query,
@@ -210,14 +218,28 @@ order by sf, qtype, lineage_type, n_threads
 out = con.execute(q).df()
 print(out)
 
-for sf in sf_list:
-    print(f"======== {sf} ==========")
-    # TODO: measure the wins of applying optimizations on logical
-    q = f"""select sf, query, n_threads, sys.lineage_type, logical.roverhead/sys.roverhead, sys.lineage_size, sys.lineage_count
-    from (select * from tpch_metrics where lineage_type='Logical-OPT') as logical JOIN
-         (select * from tpch_metrics where lineage_type IN ('Logical-window', 'SD_Capture')) as sys
-         USING (query, sf, n_threads)
-         where sf={sf} and n_threads=1
-         order by sys.lineage_type, sf, query, n_threads
-         """
-    print(con.execute(q).df())
+for n in [1, 2, 4, 8, 16]:
+    for sf in sf_list:
+        print(f"======== {sf} ==========")
+        # TODO: measure the wins of applying optimizations on logical
+        q = f"""select sf, query, n_threads, sys.output, logical.output, logical.fanout, sys.lineage_type, sys.roverhead, logical.roverhead, logical.roverhead/sys.roverhead, sys.lineage_size, sys.lineage_count
+        from (select * from tpch_metrics where lineage_type='Logical-OPT') as logical JOIN
+             (select * from tpch_metrics where lineage_type IN ('Logical-window', 'SD_Capture')) as sys
+             USING (query, sf, n_threads)
+             where sf={sf} and n_threads={n}
+             order by sys.lineage_type, sf, query, n_threads
+             """
+        print(con.execute(q).df())
+print(f"======== {sf} ==========")
+# TODO: measure the wins of applying optimizations on logical
+q = f"""select sf, sys.lineage_type, n_threads, avg(sys.roverhead), avg(logical.roverhead), 
+avg(logical.roverhead/sys.roverhead), 
+max(logical.roverhead/sys.roverhead), 
+min(logical.roverhead/sys.roverhead), 
+from (select * from tpch_metrics where lineage_type='Logical-OPT') as logical JOIN
+ (select * from tpch_metrics where lineage_type IN ('Logical-window', 'SD_Capture')) as sys
+ USING (query, sf, n_threads)
+ group by  sf, n_threads, sys.lineage_type
+ order by sys.lineage_type, sf,  n_threads
+ """
+print(con.execute(q).df())

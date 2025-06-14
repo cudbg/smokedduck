@@ -3,7 +3,7 @@
 current_date=$(date +"%Y%m%d_%H%M")
 #current_date=$(date +"%Y%m%d")
 note="exp_$current_date"
-sf_list=("1" "10" "20")
+sf_list=("1" "10") # "10" "20")
 repeat=3
 mkdir figures
 

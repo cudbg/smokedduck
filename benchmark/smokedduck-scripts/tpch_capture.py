@@ -30,19 +30,19 @@ args.profile = True
 args.stats = True
 print(args.profile)
 
-prefix = args.folder + "queries/q"
+prefix = args.folder + "queries-v2/q"
 table_name=None
 size_avg = 0.0
 if args.perm:
-    prefix = args.folder + "queries/perm/q"
+    prefix = args.folder + "queries-v2/perm/q"
     args.lineage_query = False
     lineage_type = "Logical-RID"
     table_name='lineage'
     if args.opt:
-        prefix = args.folder + "queries/optimized_perm/q"
+        prefix = args.folder + "queries-v2/optimized_perm/q"
         lineage_type = "Logical-OPT"
 elif args.gprom:
-    prefix = args.folder + "queries/gprom/q"
+    prefix = args.folder + "queries-v2/gprom/q"
     args.lineage_query = False
     lineage_type = "Logical-window"
     table_name='lineage'
@@ -57,7 +57,7 @@ opt_queries = [2, 4, 15, 16, 17, 20, 21]
 dont_scale = [2, 4, 17, 20, 21] #, 4, 16, 17, 20, 21, 22]
 dont_scale_10 = [11, 22]
 dont_scale_20 = [11, 16, 22]
-gprom_list = [1, 2, 4, 5, 7, 9, 11, 12, 13, 15, 22]
+gprom_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22]
 
 # 4, 16, 18, 20, 21, 22 join is empty. check why.
 # 11 nested loop join
@@ -80,7 +80,7 @@ for th_id in threads_list:
         print(f"running {th_id}, {i}")
         if args.gprom and i not in gprom_list: continue
         if (args.perm and args.opt == False) and ((i in dont_scale) or (sf>10 and i in dont_scale_20) or (sf==10 and i in dont_scale_10)): continue
-        if (args.gprom) and  ((sf>10 and i in dont_scale_20 or i==1) or (sf==10 and i in dont_scale_10)): continue
+        if (args.gprom) and  ((sf>10 and i in dont_scale_20) or (sf==10 and i in dont_scale_10)): continue
         if args.perm and args.opt and i not in opt_queries: continue
         args.qid = i
         # TODO: if i == 11 then replace the constant
