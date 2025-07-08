@@ -7,7 +7,7 @@ import argparse
 import csv
 import os
 
-from utils import parse_plan_timings, Run, DropLineageTables, getStats
+from utils import parse_plan_timings, Run, getStats
 
 parser = argparse.ArgumentParser(description='TPCH benchmarking script')
 parser.add_argument('notes', type=str,  help="run notes")
@@ -100,12 +100,16 @@ for th_id in threads_list:
         if args.profile:
             plan_timings, plan_full = parse_plan_timings(args.qid)
         output_size = len(df)
+        lineage_size, lineage_count, nchunks, postprocess_time = 0, 0, 0, 0
         if table_name:
             df = con.execute("select count(*) as c from {}".format(table_name)).fetchdf()
             output_size = df.loc[0,'c']
+            # TODO: get size of db prio and after, subtract -> perm size
+            con.execute(f"COPY {table_name} TO '{table_name}.parquet' (FORMAT PARQUET, COMPRESSION 'uncompressed');")
+            lineage_size = round(os.path.getsize(f"{table_name}.parquet") / (1024.0 * 1024.0))
+            os.remove(f"{table_name}.parquet")
             con.execute("DROP TABLE "+table_name)
-        print("**** output size: ", output_size)
-        lineage_size, lineage_count, nchunks, postprocess_time = 0, 0, 0, 0
+        print("**** output size: ", output_size, ", lineage_size: " , lineage_size)
         plan = None
         if args.lineage and args.stats:
             lineage_size, lineage_count, nchunks, postprocess_time, plan = getStats(con, query)
@@ -116,13 +120,8 @@ for th_id in threads_list:
         if args.show_tables:
             tables = con.execute("PRAGMA show_tables").fetchdf()
             print(tables)
-            if args.lineage:
-                for t in tables['name']:
-                    if "LINEAGE" in t:
-                        print(t)
-                        print(con.execute(f"select * from {t}").df())
         if args.lineage:
-            DropLineageTables(con)
+            con.execute("PRAGMA clear_lineage")
         results.append({'query': i, 'runtime': avg, 'sf': sf, 'repeat': args.repeat,
             'lineage_type': lineage_type, 'n_threads': th_id, 'output': output_size,
             'lineage_size': lineage_size, 'lineage_count': lineage_count,

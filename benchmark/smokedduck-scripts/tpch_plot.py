@@ -68,6 +68,20 @@ tpch_withbaseline = con.execute(f"""select
                   """).fetchdf()
 #print(avg_tpch)
 #print(tpch_withbaseline)
+# Q2, 3, 4, 5, 7
+#where query in (select query from avg_tpch where lineage_type='Logical-OPT' and sf=t1.sf)
+print(con.execute("""select sf, lineage_type, avg(lineage_size), max(lineage_size), min(lineage_size) from avg_tpch as t1
+group by sf, lineage_type order by sf, lineage_type
+    """).df())
+print(con.execute("""select sf, lineage_type, query, lineage_size, output from avg_tpch as t1 where sf=1 and query=4
+order by sf, query,  lineage_type""").df())
+print(con.execute("""select sf, t1.lineage_type, avg(t1.lineage_size/sd.lineage_size),
+max(t1.lineage_size/sd.lineage_size),
+min(t1.lineage_size/sd.lineage_size)
+from avg_tpch as t1
+join (select * from avg_tpch where lineage_type='SD_Capture') as sd using (sf, query)
+group by sf, t1.lineage_type
+    """).df())
 
 tpch_metrics = con.execute("""
 select {}, lineage_type, n_threads, output / base_output as fanout, output, nchunks, lineage_size, lineage_count, postprocess_time,

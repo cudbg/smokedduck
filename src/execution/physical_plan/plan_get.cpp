@@ -55,31 +55,6 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 	if (op.function.dependency) {
 		op.function.dependency(dependencies, op.bind_data.get());
 	}
-#ifdef LINEAGE
-	if (lineage_manager && op.bind_data && dynamic_cast<TableScanBindData*>(op.bind_data.get())) {
-		TableScanBindData* tbldata = dynamic_cast<TableScanBindData *>(op.bind_data.get());
-		string table_name_upper = tbldata->table.name;
-		for (char& c : table_name_upper) {
-			c = toupper(c);
-		}
-		auto map = lineage_manager->table_lineage_op;
-		if (map.find(table_name_upper) != map.end()) {
-			auto lineage_op = map[table_name_upper];
-			size_t underscorePos = table_name_upper.rfind('_');
-			idx_t stage_idx = 0;
-			if (underscorePos != std::string::npos && underscorePos < table_name_upper.length() - 1) {
-				// Extract the substring starting from the position after '_'
-				std::string numberStr = table_name_upper.substr(underscorePos + 1);
-				// Convert the extracted substring to an integer
-				stage_idx = std::stoi(numberStr);
-			}
-
-			return make_uniq<PhysicalLineageScan>(lineage_op, op.types, move(op.bind_data),  op.returned_types,
-			                                      op.column_ids,  op.projection_ids, op.names, move(table_filters),
-			                                      op.estimated_cardinality, stage_idx);
-		}
-	}
-#endif
 	// create the table scan node
 	if (!op.function.projection_pushdown) {
 		// function does not support projection pushdown

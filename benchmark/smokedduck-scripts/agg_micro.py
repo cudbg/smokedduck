@@ -5,7 +5,7 @@ import duckdb
 import pandas as pd
 import csv
 import argparse
-from utils import parse_plan_timings, Run, DropLineageTables, getStats, MicroDataZipfan, get_lineage_type
+from utils import parse_plan_timings, Run, getStats, MicroDataZipfan, get_lineage_type
 
 def core_aggs(args, con, tname):
     q = f"SELECT z, count(*) as agg FROM {tname} zipf1 GROUP BY z"
@@ -73,7 +73,7 @@ def int_hashAgg(con, iter, args, lineage_type, groups, cardinality, results, agg
                         print(t)
                         print(con.execute(f"select * from {t}").df())
         if args.lineage:
-            DropLineageTables(con)
+            con.execute("PRAGMA clear_lineage")
     con.execute("PRAGMA set_agg('clear')")
 
 ################### Hash Aggregate  ############
@@ -116,7 +116,7 @@ def hashAgg(con, iter, args, lineage_type, groups, cardinality, results):
             'postprocess': postprocess,
             'lineage_type': str(lineage_type)+method, 'plan_timings': str(plan_timings), 'notes': args.notes})
         if args.lineage:
-            DropLineageTables(con)
+            con.execute("PRAGMA clear_lineage")
     con.execute("PRAGMA set_agg('clear')")
 if False:
     parser = argparse.ArgumentParser(description='TPCH benchmarking script')

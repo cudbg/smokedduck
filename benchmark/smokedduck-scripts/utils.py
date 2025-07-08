@@ -111,8 +111,6 @@ def execute(Q, con, args):
     if args.profile:
         con.execute("PRAGMA enable_profiling='json'")
         con.execute("PRAGMA profiling_output='{}_plan.json';".format(args.qid))
-    if args.lineage and args.show_tables:
-        con.execute("PRAGMA persist_lineage")
     start = timer()
     df = con.execute(Q).fetchdf()
     end = timer()
@@ -125,13 +123,6 @@ def execute(Q, con, args):
         con.execute("PRAGMA enable_filter_pushdown")
     return df, end - start
 
-def DropLineageTables(con):
-    tables = con.execute("PRAGMA show_tables").fetchdf()
-    for index, row in tables.iterrows():
-        if row["name"][:7] == "LINEAGE":
-            con.execute("DROP TABLE "+row["name"])
-    con.execute("PRAGMA clear_lineage")
-
 def Run(q, args, con, table_name=None):
     dur_acc = 0.0
     print("Run: ", table_name, q)
@@ -139,7 +130,7 @@ def Run(q, args, con, table_name=None):
         df, duration = execute(q, con, args)
         dur_acc += duration
         if args.lineage and args.show_tables:
-            DropLineageTables(con)
+            con.execute("PRAGMA clear_lineage")
         if args.lineage:
             con.execute("PRAGMA clear_lineage")
         if table_name:

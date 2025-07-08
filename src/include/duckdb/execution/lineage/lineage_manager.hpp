@@ -28,11 +28,10 @@ extern thread_local OperatorLineage* pactive_lop;
 */
 class LineageManager {
 public:
-	explicit LineageManager() : smoke(false), capture(false), persist(false), enable_filter_pushdown(true), enable_short(true) {}
+	explicit LineageManager() : smoke(false), capture(false), enable_filter_pushdown(true), enable_short(true) {}
 	void InitOperatorPlan(ClientContext &context, PhysicalOperator *op);
 	shared_ptr<OperatorLineage> CreateOperatorLineage(ClientContext &context, PhysicalOperator *op);
 	int PlanAnnotator(PhysicalOperator *op, int counter);
-	void CreateLineageTables(ClientContext &context, PhysicalOperator *op, idx_t query_id);
 	void StoreQueryLineage(ClientContext &context, PhysicalOperator* op, string query);
 	void Reset() {
 		active_log = nullptr;
@@ -67,7 +66,6 @@ public:
 public:
   bool smoke;
   bool capture;
-  bool persist;
   std::unordered_map<void*, shared_ptr<OperatorLineage>> global_logger;
   std::unordered_map<void*, int> operators_ids;
 

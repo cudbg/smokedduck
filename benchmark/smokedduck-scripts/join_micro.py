@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import csv
 import argparse
-from utils import Run, DropLineageTables, getStats, MicroDataZipfan, parse_plan_timings, get_lineage_type
+from utils import Run, getStats, MicroDataZipfan, parse_plan_timings, get_lineage_type
 
 def core_mtn(con, args, op, table1, table2):
     perm_rid = ''
@@ -67,7 +67,7 @@ def MtM(con, iter, args, lineage_type, groups, cardinality, a_list, results, op,
                         if "LINEAGE" in t and "SCAN" not in t:
                             print(t)
                             print(con.execute(f"select * from {t}").df())
-            DropLineageTables(con)
+            con.execute("PRAGMA clear_lineage")
     con.execute(f"PRAGMA set_join('clear')")
 
 def setup_pt(con, g, op, varchar):
@@ -133,7 +133,7 @@ def FKPK(con, iter, args, lineage_type, groups, cardinality, a_list, results, op
                             if "LINEAGE" in t and "SCAN" not in t:
                                 print(t)
                                 print(con.execute(f"select * from {t}").df())
-                DropLineageTables(con)
+                con.execute("PRAGMA clear_lineage")
         con.execute("drop table PT")
     con.execute(f"PRAGMA set_join('clear')")
 
@@ -255,7 +255,7 @@ def join_lessthan(con, iter, args, lineage_type, cardinality, results, op, force
                         if "LINEAGE" in t and "SCAN" not in t:
                             print(t)
                             print(con.execute(f"select * from {t}").df())
-            DropLineageTables(con)
+            con.execute("PRAGMA clear_lineage")
         con.execute("drop table t1")
         con.execute("drop table t2")
     con.execute("PRAGMA set_join('clear')")

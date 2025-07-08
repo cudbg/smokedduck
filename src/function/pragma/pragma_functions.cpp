@@ -131,7 +131,6 @@ static void PragmaEnableSmoke(ClientContext &context, const FunctionParameters &
   if (!lineage_manager) lineage_manager = make_uniq<LineageManager>();
 	lineage_manager->smoke = true;
 	lineage_manager->capture = false;
-  lineage_manager->persist = false;
 	std::cout << "\nEnable Smoke Capture" << std::endl;
 }
 
@@ -139,36 +138,27 @@ static void PragmaDisableSmoke(ClientContext &context, const FunctionParameters 
   if (!lineage_manager) lineage_manager = make_uniq<LineageManager>();
 	lineage_manager->smoke = false;
 	lineage_manager->capture = false;
-  lineage_manager->persist = false;
 	std::cout << "\nDisable Smoke Capture" << std::endl;
 }
 
 static void PragmaEnableLineage(ClientContext &context, const FunctionParameters &parameters) {
   if (!lineage_manager) lineage_manager = make_uniq<LineageManager>();
 	lineage_manager->capture = true;
-  lineage_manager->persist = false;
 	std::cout << "\nEnable Lineage Capture" << std::endl;
 }
 
 static void PragmaDisableLineage(ClientContext &context, const FunctionParameters &parameters) {
   if (lineage_manager) {
     lineage_manager->capture = false;
-    lineage_manager->persist = false;
   }
 	std::cout << "\nDisable Lineage Capture" << std::endl;
 }
 
 static void PragmaClearLineage(ClientContext &context, const FunctionParameters &parameters) {
   if (lineage_manager) {
-    lineage_manager->persist = false;
     lineage_manager->Clear();
   }
 	std::cout << "\nClear Lineage" << std::endl;
-}
-
-static void PragmaPersistLineage(ClientContext &context, const FunctionParameters &parameters) {
-  if (lineage_manager) lineage_manager->persist = true;
-	std::cout << "\nEnable Persist Lineage" << std::endl;
 }
 
 static void PragmaDisableFilterPushDown(ClientContext &context, const FunctionParameters &parameters) {
@@ -257,7 +247,6 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_lineage", PragmaEnableLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_lineage", PragmaDisableLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("clear_lineage", PragmaClearLineage));
-	set.AddFunction(PragmaFunction::PragmaStatement("persist_lineage", PragmaPersistLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_filter_pushdown", PragmaEnableFilterPushDown));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_filter_pushdown", PragmaDisableFilterPushDown));
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_short", PragmaEnableShort));

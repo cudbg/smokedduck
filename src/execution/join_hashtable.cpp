@@ -546,11 +546,10 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
     if (lineage_manager->capture && active_log && pactive_lop && result_count > 0) {
       auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
       data_ptr_t* rhs_ptrs = (data_ptr_t*)malloc(sizeof(data_ptr_t)*result_count);
-      //std::copy(ptrs, ptrs + count , rhs_ptrs);
       //memcpy(rhs_ptrs, ptrs, count*sizeof(data_ptr_t));
       for (idx_t i = 0; i < result_count; i++) {
-        auto idx = result_vector.get_index(i);
-        rhs_ptrs[i] = ptrs[idx];
+        // auto idx = result_vector.get_index(i);
+        rhs_ptrs[i] = ptrs[ result_vector[i] ];
       }
       sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t)*result_count);
       memcpy(sel_copy, result_vector.data(), result_count*sizeof(sel_t));

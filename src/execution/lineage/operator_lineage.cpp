@@ -4,6 +4,96 @@
 
 namespace duckdb {
 
+  /*
+// add BuildIndexes() 
+// zone map for ResultCollector
+// {oid} -> {lsn}
+void OperatorLineage::BuildIndexes() {
+  if (processed) return;
+  if (thread_vec.empty()) {
+    thread_vec.reserve(log.size());
+    for (const auto& pair : log) {
+      thread_vec.push_back(pair.first);
+    }
+  }
+	switch (type) {
+  case PhysicalOperatorType::ORDER_BY:
+	case PhysicalOperatorType::TABLE_SCAN:
+	case PhysicalOperatorType::FILTER: 
+	case PhysicalOperatorType::COLUMN_DATA_SCAN:
+	case PhysicalOperatorType::STREAMING_LIMIT:
+	case PhysicalOperatorType::LIMIT:
+	case PhysicalOperatorType::NESTED_LOOP_JOIN:
+	case PhysicalOperatorType::BLOCKWISE_NL_JOIN:
+	case PhysicalOperatorType::CROSS_PRODUCT:
+	case PhysicalOperatorType::PIECEWISE_MERGE_JOIN: {
+		break;
+	}
+	case PhysicalOperatorType::HASH_GROUP_BY:
+	case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
+    // the following steps are across multiple functions;
+    // build light weight indexes over the output of each function?
+    //
+    // (1) start from finalize_states; get address for the oid we are looking for
+    // build index[oid] -> k , tkey?
+    //auto payload = log[tkey]->finalize_states_log[k].addresses;
+    // then payload[oid] -> address
+    // (2) use address to get the mapping from combine_log, tkey?
+    // (3) use the local_address 
+    for (int i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      if (log.count(tkey) == 0 || log[tkey]->finalize_states_log.empty()) continue;
+      idx_t count_so_far = 0;
+      idx_t res_count = log[tkey]->finalize_states_log[k].count;
+      // build zone maps; 
+      // zm[tkey][count_so_far+res_count] = k; // tkey is passed from parent
+      // log[tkey]->finalize_states_log[k][i-offset]
+    }      
+    // build for combine log to avoid iterating over the artifacts: index[out_address] -> in_address
+    // find scatter_sel_log[k]->payload[i] == out_address; use (i, k, tkey) to access log that generated it
+    // it depends on the child, if pipeline breaker, then we need to? else?
+    // scatter_sel_log -> for each output id (oid) : index[oid].insert(lsn); // all the unique lsn that includes oid
+    // we get lsn, we look for oid , if we find oid
+    break;
+  } case PhysicalOperatorType::HASH_JOIN: {
+    // getdata() -> ?
+    // execute() -> zonemap ? it is pipelined
+    // sink() -> build index
+    for (int i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      idx_t count_so_far = 0;
+      if (log.count(tkey) == 0 || log[tkey]->scatter_sel_log.empty()) continue;
+      // std::cout << "Scatter Join: " << log[tkey]->scatter_sel_log.size() << std::endl;
+      for (int k = 0; k < log[tkey]->scatter_sel_log.size(); k++) {
+        idx_t res_count = log[tkey]->scatter_sel_log[k].count;
+        idx_t in_start = log[tkey]->scatter_sel_log[k].in_start;
+        auto payload = log[tkey]->scatter_sel_log[k].addresses;
+        //index[payload[j]] -> {k, tkey};
+      }
+    }
+    for (int i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      if (log.count(tkey) == 0 || log[tkey]->perfect_full_scan_ht_log.empty()) continue;
+      for (int k = 0; k < log[tkey]->perfect_full_scan_ht_log.size(); k++) {
+        idx_t key_count = log[tkey]->perfect_full_scan_ht_log[k].key_count;
+        idx_t ht_count = log[tkey]->perfect_full_scan_ht_log[k].ht_count;
+        for (int e=0; e < key_count; e++) {
+          idx_t build_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_build->owned_data.get()[e];
+          idx_t tuples_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_tuples->owned_data.get()[e];
+          data_ptr_t* ptr = (data_ptr_t*)log[tkey]->perfect_full_scan_ht_log[k].row_locations->GetData();
+          index[build_idx] -> {k, tkey}
+        }
+      }
+    }
+    break;
+  }
+	default: {
+		// Lineage unimplemented! TODO all of these :)
+	}
+	}
+	processed = true;
+}*/
+
 void OperatorLineage::PostProcess() {
   if (processed) return;
   if (thread_vec.empty()) {

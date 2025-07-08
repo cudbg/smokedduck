@@ -5,7 +5,7 @@ import duckdb
 import pandas as pd
 import csv
 import argparse
-from utils import parse_plan_timings, Run, DropLineageTables, getStats, MicroDataSelective, get_lineage_type
+from utils import parse_plan_timings, Run, getStats, MicroDataSelective, get_lineage_type
 
 ################### Filter ###########################
 # predicate: z=0
@@ -59,7 +59,7 @@ def FilterMicro(con, iter, args, lineage_type, selectivity, cardinality, results
                         if "LINEAGE" in t:
                             print(t)
                             print(con.execute(f"select * from {t}").df())
-            DropLineageTables(con)
+            con.execute("PRAGMA clear_lineage")
 
     con.execute("PRAGMA enable_filter_pushdown")
 

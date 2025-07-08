@@ -68,7 +68,6 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext 
 int LineageManager::PlanAnnotator(PhysicalOperator *op, int counter) {
   if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
 		PhysicalOperator* plan = &dynamic_cast<PhysicalResultCollector*>(op)->plan;
-    // if (persist) 
     //std::cout << plan->ToString() << std::endl;
 		counter = PlanAnnotator(plan, counter);
 	}
@@ -92,47 +91,6 @@ void LineageManager::InitOperatorPlan(ClientContext &context, PhysicalOperator *
 	CreateOperatorLineage(context, op);
 }
 
-void LineageManager::CreateLineageTables(ClientContext &context, PhysicalOperator *op, idx_t query_id) {
-  if (op->type == PhysicalOperatorType::RIGHT_DELIM_JOIN || op->type == PhysicalOperatorType::LEFT_DELIM_JOIN) {
-		CreateLineageTables( context, dynamic_cast<PhysicalDelimJoin *>(op)->join.get(), query_id);
-		CreateLineageTables(context, (PhysicalOperator*) dynamic_cast<PhysicalDelimJoin *>(op)->distinct.get(), query_id);
-	}
-	for (idx_t i = 0; i < op->children.size(); i++) {
-		CreateLineageTables(context, op->children[i].get(), query_id);
-	}
-
-	OperatorLineage *lop = lineage_manager->global_logger[(void *)op].get();
-	if (lop == nullptr) return;
-  lop->extra = op->ParamsToString();
-
-  if (op->type == PhysicalOperatorType::TABLE_SCAN) {
-		string table_str = dynamic_cast<PhysicalTableScan *>(op)->ParamsToString();
-		lop->table_name = table_str.substr(0, table_str.find('\n'));
-	}
-
-	vector<ColumnDefinition> table_column_types = lop->GetTableColumnTypes();
-	if (table_column_types.empty()) return;
-
-	// Example: LINEAGE_1_HASH_JOIN_3
-	string prefix = "LINEAGE_" + to_string(query_id) + "_" + op->GetName() + "_" + to_string(lop->operator_id);
-	prefix.erase( remove( prefix.begin(), prefix.end(), ' ' ), prefix.end() );
-	// add column_stats, cardinality
-	string catalog_name = TEMP_CATALOG;
-	auto binder = Binder::CreateBinder(context);
-	auto &catalog = Catalog::GetCatalog(context, catalog_name);
-  // Example: LINEAGE_1_HASH_JOIN_3
-  string table_name = prefix;
-  // Create Table
-  auto create_info = make_uniq<CreateTableInfo>(catalog_name, DEFAULT_SCHEMA, table_name);
-  create_info->temporary = true;
-  create_info->on_conflict = OnCreateConflict::IGNORE_ON_CONFLICT;
-  for (idx_t col_i = 0; col_i < table_column_types.size(); col_i++) {
-    create_info->columns.AddColumn(move(table_column_types[col_i]));
-  }
-  table_lineage_op[table_name] = lineage_manager->global_logger[(void *)op];
-  catalog.CreateTable(context, move(create_info));
-}
-
 void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator *op, string query) {
 	if (!capture)
 		return;
@@ -142,7 +100,6 @@ void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator 
 	queryid_to_plan[query_id] = lineage_manager->global_logger[(void *)op];
   active_log = nullptr;
   pactive_lop = nullptr;
-  if (persist) CreateLineageTables(context, op, query_id);
 }
 
 void LineageManager::PostProcess(shared_ptr<OperatorLineage> lop) {
