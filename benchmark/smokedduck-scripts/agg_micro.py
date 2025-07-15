@@ -23,7 +23,7 @@ def core_aggs(args, con, tname):
     elif args.perm:
         q = f"SELECT zipf1.rowid as rid, z, c FROM (SELECT z, count(*) as c FROM {tname} GROUP BY z) as temp join {tname} zipf1 using (z)"
 
-    q = "create table zipf1_perm_lineage as "+ q
+    q = "create temp table zipf1_perm_lineage as "+ q
     table_name='zipf1_perm_lineage'
     avg, df = Run(q, args, con, table_name)
     df = con.execute("select count(*) as c from zipf1_perm_lineage").fetchdf()
@@ -63,7 +63,8 @@ def int_hashAgg(con, iter, args, lineage_type, groups, cardinality, results, agg
             'output_size': output_size, 'lineage_size_mb': lineage_size,
             'lineage_count': lineage_count, 'nchunks': nchunks,
             'postprocess': postprocess,
-            'lineage_type': str(lineage_type)+method, 'plan_timings': str(plan_timings), 'notes': args.notes})
+            'lineage_type': str(lineage_type)+method, 'plan_timings': str(plan_timings),
+            'plan': str(plan_full), 'notes': args.notes})
         if args.lineage and args.show_tables:
             tables = con.execute("PRAGMA show_tables").fetchdf()
             print(tables)
@@ -99,7 +100,7 @@ def hashAgg(con, iter, args, lineage_type, groups, cardinality, results):
             method="_list"
         elif args.perm:
             q = f"SELECT zipf1.rowid, z FROM (SELECT z, count(*) FROM {zipf1} GROUP BY z) as temp join {zipf1} zipf1 using (z)"
-        q = "create table zipf1_perm_lineage as "+ q
+        q = "create temp table zipf1_perm_lineage as "+ q
         table_name='zipf1_perm_lineage'
         avg, df = Run(q, args, con, table_name)
         df = con.execute("select count(*) as c from zipf1_perm_lineage").fetchdf()
@@ -114,7 +115,8 @@ def hashAgg(con, iter, args, lineage_type, groups, cardinality, results):
             'output_size': output_size, 'lineage_size_mb': lineage_size,
             'lineage_count': lineage_count, 'nchunks': nchunks,
             'postprocess': postprocess,
-            'lineage_type': str(lineage_type)+method, 'plan_timings': str(plan_timings), 'notes': args.notes})
+            'lineage_type': str(lineage_type)+method, 'plan_timings': str(plan_timings),
+            'plan': str(plan_full), 'notes': args.notes})
         if args.lineage:
             con.execute("PRAGMA clear_lineage")
     con.execute("PRAGMA set_agg('clear')")

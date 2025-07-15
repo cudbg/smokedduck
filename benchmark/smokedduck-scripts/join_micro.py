@@ -15,7 +15,7 @@ def core_mtn(con, args, op, table1, table2):
         perm_rid = "zipf1.rowid as zipf1_rowid, zipf2.rowid as zipf2_rowid,"
     q = f"SELECT {perm_rid}zipf2.idx, zipf1.v FROM {table1} zipf1, {table2} zipf2 WHERE zipf1.z=zipf2.z"
     table_name = None
-    q = "create table perm_lineage as "+ q
+    q = "create temp table perm_lineage as "+ q
     table_name='perm_lineage'
     avg, df = Run(q, args, con, table_name)
     df = con.execute("select count(*) as c from perm_lineage").fetchdf()
@@ -57,7 +57,7 @@ def MtM(con, iter, args, lineage_type, groups, cardinality, a_list, results, op,
             'output_size': output_size, 'lineage_size_mb': lineage_size_mb,
             'lineage_count': lineage_count, 'nchunks': nchunks,
             'postprocess': postprocess, 'lineage_type': lineage_type,
-            'plan_timings': str(plan_timings), 'notes': args.notes})
+            'plan_timings': str(plan_timings), 'plan': str(plan_full), 'notes': args.notes})
         if args.lineage:
             if args.show_tables:
                 tables = con.execute("PRAGMA show_tables").fetchdf()
@@ -79,7 +79,7 @@ def setup_pt(con, g, op, varchar):
         idx = list(range(0, g))
     vals = np.random.uniform(0, 100, g)
     PT = pd.DataFrame({'id':idx, 'v':vals})
-    con.execute("create table PT as select * from PT")
+    con.execute("create temp table PT as select * from PT")
 
 def core_pkfk(con, args, op, ft_table):
     perm_rid = ''
@@ -87,7 +87,7 @@ def core_pkfk(con, args, op, ft_table):
         perm_rid = "FT.rowid as FT_rowid, PT.rowid as PT_rowid,"
     q = f"""SELECT {perm_rid}FT.v, PT.id FROM PT , {ft_table} as FT WHERE PT.id=FT.z"""
     table_name = None
-    q = "create table perm_lineage as "+ q
+    q = "create temp table perm_lineage as "+ q
     table_name='perm_lineage'
     avg, df = Run(q, args, con, table_name)
     df = con.execute("select count(*) as c from perm_lineage").fetchdf()
@@ -123,7 +123,7 @@ def FKPK(con, iter, args, lineage_type, groups, cardinality, a_list, results, op
                 'output_size': output_size, 'lineage_size_mb': lineage_size_mb,
                 'lineage_count': lineage_count, 'nchunks': nchunks,
                 'postprocess': postprocess,
-                'lineage_type': lineage_type, 'plan_timings': str(plan_timings), 'notes': args.notes})
+                'lineage_type': lineage_type, 'plan_timings': str(plan_timings), 'plan': str(plan_full), 'notes': args.notes})
             if args.lineage:
                 if args.show_tables:
                     tables = con.execute("PRAGMA show_tables").fetchdf()
@@ -191,8 +191,8 @@ def setup_join_lessthan(con, card, sel, p):
     for col in range(p):
         t1["col{}".format(col)]  = np.random.randint(0, 100, len(t1))
         t2["col{}".format(col)]  = np.random.randint(0, 100, len(t2))
-    con.execute("create table t1 as select * from t1")
-    con.execute("create table t2 as select * from t2")
+    con.execute("create temp table t1 as select * from t1")
+    con.execute("create temp table t2 as select * from t2")
     print("done generating data")
 
 def core_join_less(con, args, pred):
@@ -202,7 +202,7 @@ def core_join_less(con, args, pred):
         perm_rid = "t1.rowid as r1_rowid, t2.rowid as t2_rowid, "
     q = f"select {perm_rid}* from t1, t2{pred}"
     table_name = None
-    q = "create table zipf1_perm_lineage as "+ q
+    q = "create temp table zipf1_perm_lineage as "+ q
     table_name='zipf1_perm_lineage'
     avg, df = Run(q, args, con, table_name)
     df = con.execute("select count(*) as c from zipf1_perm_lineage").fetchdf()
@@ -245,7 +245,8 @@ def join_lessthan(con, iter, args, lineage_type, cardinality, results, op, force
             'output_size': output_size, 'lineage_size_mb': lineage_size_mb,
             'lineage_count': lineage_count, 'nchunks': nchunks,
             'postprocess': postprocess,
-            'lineage_type': lineage_type, 'plan_timings': str(plan_timings), 'notes': args.notes})
+            'lineage_type': lineage_type, 'plan_timings': str(plan_timings), 'plan': str(plan_full),
+            'notes': args.notes})
         if args.lineage:
             if args.show_tables:
                 tables = con.execute("PRAGMA show_tables").fetchdf()

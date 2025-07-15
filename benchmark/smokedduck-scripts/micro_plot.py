@@ -90,10 +90,12 @@ sd_overheads = """
 ((op_t-base_op_t)/base_op_t)*100 as op_roverhead,
 """
 
+global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
+
 def mktemplate(overheadType, prefix, table, header):
     return f"""
     SELECT '{overheadType}' as overheadtype, {header}, lineage_type as system,
-           greatest(0, {prefix}overhead) as overhead, greatest(0, {prefix}roverhead) as roverhead
+           greatest(0, {prefix}overhead) as overhead, greatest(0, {prefix}roverhead) as roverhead, output_size
     FROM {table}"""
 
 template = f"""
@@ -168,6 +170,10 @@ if plot_filter:
                       """).df()
     where = f"WHERE op_name IN ('SEQ_SCAN','FILTER') {cond}"
     data  = con.execute(template.format(g, g, g, where)).fetchdf()
+    
+    #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
+    global_df = con.execute("select system, 'FILTER' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+
     data = con.execute("""select 'SD' as sys_label, * from data where system='SmokedDuck' UNION ALL 
     SELECT 'Logical' as sys_label, * from data where system='Perm' """).df()
     data['op_label'] = data['op_name'].apply(lambda x: "Filter Scan" if x=="SEQ_SCAN" else "Filter")
@@ -260,6 +266,12 @@ if plot_join:
     for op_name in op_names:
         where = f"WHERE op_name IN ('{op_name}') {cond}"
         data  = con.execute(template.format(g, g, g, where)).fetchdf()
+        if len(global_df) == 0:
+            #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
+            global_df = con.execute("select system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+        global_df = con.execute("""select * from global_df UNION ALL
+        select system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
+        """).df()
         sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
         print(sample_data)
         # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
@@ -287,6 +299,7 @@ if plot_ineq:
     data  = con.execute(template.format(g, g, g, where)).fetchdf()
     d = { "BLOCKWISE_NL_JOIN": "BNL", "PIECEWISE_MERGE_JOIN": "Merge", "NESTED_LOOP_JOIN": "NL", "CROSS_PRODUCT": "CROSS", "HASH_JOIN": "HJ"}
     data['op_label'] = data['op_name'].apply(d.get)
+    
     system_d = { "SmokedDuck": "SD", "Perm": "Logical"}
     data['sys_label'] = data['system'].apply(system_d.get)
     print(data)
@@ -301,6 +314,12 @@ if plot_ineq:
     for op_name in op_names:
         where = f"WHERE op_name IN ('{op_name}') {cond}"
         data  = con.execute(template.format(g, g, g, where)).fetchdf()
+        if len(global_df) == 0:
+            #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
+            global_df = con.execute("select system, 'Ineq' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+        global_df = con.execute("""select * from global_df UNION ALL
+        select system, 'Ineq' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
+        """).df()
         print(data)
         # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
         for idx, y_axis in enumerate(y_axis_list):
@@ -333,6 +352,14 @@ if plot_ineq:
     for op_name in op_names:
         where = f"WHERE op_name IN ('{op_name}') {cond}"
         data  = con.execute(template.format(g, g, g, where)).fetchdf()
+        
+        if len(global_df) == 0:
+            #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
+            global_df = con.execute("select system, 'Cross' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+        global_df = con.execute("""select * from global_df UNION ALL
+        select system, 'Cross' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
+        """).df()
+
         print(data)
         # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
         for idx, y_axis in enumerate(y_axis_list):
@@ -365,6 +392,13 @@ if plot_join_mtn:
     for op_name in op_names:
         where = f"WHERE op_name IN ('{op_name}') {cond}"
         data  = con.execute(template.format(g, g, g, where)).fetchdf()
+        if len(global_df) == 0:
+            #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
+            global_df = con.execute("select system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+        global_df = con.execute("""select * from global_df UNION ALL
+        select system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
+        """).df()
+
         sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
 
         sample_data_1m = con.execute("select * from sample_data where n2=1000000 and skew=1").df()
@@ -433,6 +467,13 @@ if plot_agg:
     print(mdata)
     where = f"where system IN ('Baseline', 'SmokedDuck', 'Perm', 'Perm_list', 'Smoke')  {cond}"
     data  = con.execute(template.format(g, g, g, where)).fetchdf()
+    
+    if len(global_df) == 0:
+        #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
+        global_df = con.execute("select system, 'HA' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+    global_df = con.execute("""select * from global_df UNION ALL
+    select system, 'HA' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
+    """).df()
     sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
     print(con.execute("select * from data where system='Perm'").df())
 
@@ -498,3 +539,59 @@ if plot_agg:
             order by overheadtype, system, op_name
             """).df()
     print(summary)
+
+
+#global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
+global_df = con.execute("""select t.*, output_size/max_out as out_ratio from global_df as t JOIN
+        (select query, operator, system, overheadType,max(output_size) as max_out from global_df group by query, operator, system, overheadType) USING (system, query, operator, overheadType)
+        """).df()
+d = { "BLOCKWISE_NL_JOIN": "BNL", "PIECEWISE_MERGE_JOIN": "Merge", "NESTED_LOOP_JOIN": "NL", "CROSS_PRODUCT": "CROSS", "HASH_JOIN": "HJ",
+        "HASH_JOIN_mtmvarchar_": "HJ", "HASH_JOIN_mtm": "HJ", "HASH_JOINvarchar_": "HJ", "HASH_GROUP_BY": "HASH GROUP BY",
+        "HASH_GROUP_BY_var": "HASH GROUP BY", "PERFECT_HASH_GROUP_BY": "PERFECT HG", "CROSS_PRODUCT": "CROSS",  "FILTER": "FILTER", "SEQ_SCAN": "FILTER SCAN"
+        }
+global_df['label'] = global_df['operator'].apply(d.get)
+print(con.execute("select distinct operator from global_df").df())
+#global_df['label'] = pd.Categorical(global_df['label'], categories=desired_order, ordered=True)
+print(con.execute("select * from global_df").df())
+plot_data = con.execute("select * from global_df where system in ('Perm', 'SmokedDuck') and overheadType='Total'").df()
+
+
+from plotnine import  *
+
+legend = theme_bw() + theme(
+    legend_background=element_blank(),
+    legend_justification=(1, 0),
+    legend_position=(1, 0),  # bottom-right inside plot
+    legend_key=element_blank(),
+    legend_title=element_blank(),
+    text=element_text(color="#333333", size=11, family="DejaVu Sans"),
+    axis_text=element_text(color="#333333", size=11),
+    plot_background=element_blank(),
+    panel_border=element_rect(color="#e0e0e0"),
+    strip_background=element_rect(fill="#efefef", color="#e0e0e0"),
+    strip_text=element_text(color="#333333")
+)
+
+pastel_colors = ['#AEC6CF', '#FFB347', '#B39EB5', '#77DD77', '#FF6961']
+
+p = (
+    ggplot(plot_data, aes(x='label', y='roverhead')) +
+    geom_boxplot(alpha=0.5) +
+    geom_jitter(aes(color='out_ratio'), width=0.2, alpha=0.7) +
+    #scale_color_gradient(low=pastel_colors[2], high=pastel_colors[4]) +
+    scale_fill_gradientn(colors=[
+    '#FFDEE9',  # pastel pink
+    '#E0BBE4',  # pastel purple
+    '#B5FFFC'   # pastel blu
+    ]) +
+    scale_y_log10(breaks=[1, 10, 100], labels=["1", "10", "100"]) +
+    facet_wrap('~system', ncol=1, scales='free_y') +
+    labs(x='Query', y='Relative Overhead (%) [log]') +
+    coord_flip() +
+    legend
+)
+p.save("figures/micro_boxplot{}.png".format(y_axis), width=8, height=10, dpi=300)
+
+print(con.execute("""select system, operator, overheadType, avg(roverhead), max(roverhead), min(roverhead)
+    from global_df group by system, operator, overheadType order by system, operator, overheadType""").df().to_string())
+
