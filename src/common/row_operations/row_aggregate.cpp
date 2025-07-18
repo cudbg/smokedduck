@@ -84,12 +84,12 @@ void RowOperations::CombineStates(RowOperationsState &state, TupleDataLayout &la
 
 #ifdef LINEAGE
 	if (lineage_manager->capture && active_log) {
-		data_ptr_t* src = new data_ptr_t[count];
+		data_ptr_t* src = (data_ptr_t*)malloc(sizeof(data_ptr_t)*count);
     auto src_ptrs = FlatVector::GetData<data_ptr_t>(sources);
     memcpy(src, src_ptrs, count * sizeof(data_ptr_t));
 
 		auto target_ptrs = FlatVector::GetData<data_ptr_t>(targets);
-	  data_ptr_t* target = new data_ptr_t[count];
+	  data_ptr_t* target = (data_ptr_t*)malloc(sizeof(data_ptr_t)*count);
     memcpy(target, target_ptrs, count * sizeof(data_ptr_t));
 		active_log->combine_log.emplace_back(src, target, count);
 	}
@@ -130,7 +130,7 @@ void RowOperations::FinalizeStates(RowOperationsState &state, TupleDataLayout &l
 #ifdef LINEAGE
 	if (lineage_manager->capture && active_log) {
     auto ptrs = FlatVector::GetData<data_ptr_t>(addresses_copy);
-		data_ptr_t* addresses = new data_ptr_t[result.size()];
+		data_ptr_t* addresses = (data_ptr_t*)malloc(sizeof(data_ptr_t)*result.size());
     memcpy(addresses, ptrs, result.size() * sizeof(data_ptr_t));
 		active_log->finalize_states_log.emplace_back(addresses, result.size());
 	}

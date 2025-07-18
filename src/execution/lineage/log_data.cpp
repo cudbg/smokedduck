@@ -3,11 +3,11 @@
 
 namespace duckdb {
 
-  std::pair<int, int> Log::LatestLSN() {
+  std::pair<int, int> Log::LatestLSN() const {
     return latest;
   }
 
-  void Log::SetLatestLSN(std::pair<int, int> lsn_fn) {
+  void Log::SetLatestLSN(const std::pair<int, int>& lsn_fn) {
     latest = lsn_fn;
   }
 

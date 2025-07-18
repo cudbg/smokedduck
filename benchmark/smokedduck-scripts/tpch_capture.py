@@ -127,7 +127,7 @@ for th_id in threads_list:
             'lineage_size': lineage_size, 'lineage_count': lineage_count,
             'nchunks': nchunks, 'postprocess_time': postprocess_time,
             'notes': args.notes, 'plan_timings': str(plan_timings), 'plan': str(plan_full)})
-#os.remove(dbname)
+os.remove(dbname)
 print("average", size_avg/22.0)
 if args.save_csv:
     dbname="tpch_benchmark_capture_{}.db".format(args.notes)

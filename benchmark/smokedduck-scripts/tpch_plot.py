@@ -1,11 +1,10 @@
-# check q3, q10, q16, q21, 
 import json
 import pandas as pd
 import argparse
 from pygg import *
 import duckdb
 from duckdb.typing import *
-from utils import legend_bottom, legend_side, relative_overhead, overhead, getAllExec, getMat
+from utils import legend_bottom, legend_side, relative_overhead, overhead, getAllExec, getMat, getTime
 
 type1 = [1, 3, 5, 6, 7, 8, 9, 10, 12, 13, 14, 19]
 type2 = [11, 15, 16, 18]
@@ -19,25 +18,19 @@ def cat(qid):
     else:
         return "3. Correlated subQs"
 
-
 parser = argparse.ArgumentParser(description='TPCH benchmarking script')
 parser.add_argument('--db', type=str, help='queries folder', default='tpch_benchmark_capture_may27_e.csv')
 args = parser.parse_args()
 
 
-con = duckdb.connect("tpch_benchmark_capture_exp_20250602_0914.db")
-windows_df = con.execute("select * from tpch_capture").df()
-
 con = duckdb.connect(args.db)
 con.create_function("getMat", getMat, [VARCHAR], FLOAT)
 con.create_function("getAllExec", getAllExec, [VARCHAR], FLOAT)
+con.create_function("getTime", getTime, [VARCHAR], FLOAT)
 con.create_function("cat", cat, [BIGINT], VARCHAR)
-print(con.execute("select * from tpch_capture").df())
-tpch_union = con.execute("select * from windows_df UNION ALL select * from tpch_capture").df()
-
-tpch_df = con.execute("""select *, cat(query) as qtype, getMat(plan_timings) as mat_time, getAllExec(plan_timings) as plan_runtime
-    from tpch_union""").df()
-
+tpch_df = con.execute("""select *, cat(query) as qtype, getMat(plan_timings) as mat_time, getTime(plan) as plan_runtime,
+    getAllExec(plan_timings) as sum_plan_runtime
+    from tpch_capture""").df()
 tpch_opt = con.execute("""select * from tpch_df
                     where lineage_type='Logical-RID'
                           and query not in (select query from tpch_df where lineage_type='Logical-OPT')
@@ -65,39 +58,21 @@ g = ','.join(header_unique)
 tpch_withbaseline = con.execute(f"""select
                   t1.plan_runtime as base_plan_runtime, t1.runtime as base_runtime,
                   t1.output as base_output, t1.mat_time as base_mat_time,
-                  (t1.plan_runtime-t1.mat_time) as base_plan_no_create,
-                  (t2.plan_runtime-t2.mat_time) as plan_no_create,
                   t1.lineage_size as base_lineage_size,
                   t1.lineage_count as base_lineage_count,
                   t1.postprocess_time as base_pp,
                   t2.* from (select {g}, {m} from avg_tpch where lineage_type='Baseline') as t1
                   join avg_tpch  as t2 using ({g})
                   """).fetchdf()
-#print(avg_tpch)
-#print(tpch_withbaseline)
-# Q2, 3, 4, 5, 7
-#where query in (select query from avg_tpch where lineage_type='Logical-OPT' and sf=t1.sf)
-print(con.execute("""select sf, lineage_type, avg(lineage_size), max(lineage_size), min(lineage_size) from avg_tpch as t1
-group by sf, lineage_type order by sf, lineage_type
-    """).df())
-print(con.execute("""select sf, lineage_type, query, lineage_size, output from avg_tpch as t1 where sf=1 and query=4
-order by sf, query,  lineage_type""").df())
-print(con.execute("""select sf, t1.lineage_type, avg(t1.lineage_size/sd.lineage_size),
-max(t1.lineage_size/sd.lineage_size),
-min(t1.lineage_size/sd.lineage_size)
-from avg_tpch as t1
-join (select * from avg_tpch where lineage_type='SD_Capture') as sd using (sf, query)
-group by sf, t1.lineage_type
-    """).df())
 
 tpch_metrics = con.execute("""
 select {}, lineage_type, n_threads, output / base_output as fanout, output, nchunks, lineage_size, lineage_count, postprocess_time,
-(plan_no_create-base_plan_no_create)*1000 as exec_overhead,
-((plan_no_create-base_plan_no_create)/base_plan_no_create)*100 as exec_roverhead,
+((plan_runtime-mat_time)-(base_plan_runtime-base_mat_time))*1000 as exec_overhead,
+(( (plan_runtime-mat_time) - (base_plan_runtime-base_mat_time) )/base_plan_runtime)*100 as exec_roverhead,
 (mat_time - base_mat_time)*1000 as mat_overhead,
-((mat_time - base_mat_time) / base_plan_no_create) *100 as mat_roverhead,
+((mat_time - base_mat_time) / base_plan_runtime) *100 as mat_roverhead,
 (plan_runtime-base_plan_runtime)*1000 as overhead,
-((plan_runtime-base_plan_runtime)/base_plan_no_create)*100 as roverhead,
+((plan_runtime-base_plan_runtime)/base_plan_runtime)*100 as roverhead,
 from tpch_withbaseline order by qtype, query, n_threads, lineage_type
                   """.format(g, g, g)).fetchdf()
 print(tpch_metrics)
@@ -126,7 +101,7 @@ template = f"""
     {mktemplate('Execute', 'exec_', 'tpch_metrics')}
   ) SELECT * FROM temp {"{}"} ORDER BY overheadType desc """
 
-where = f"where overheadtype='Total' and n_threads=1"
+where = f"where overheadtype<>'Materialize' and n_threads=1"
 q = template.format(where)
 print(q)
 data = con.execute(q).fetchdf()
@@ -152,20 +127,18 @@ if 1:
         ggsave("figures/tpch_{}.png".format(y_axis), p, postfix=postfix,  width=14, height=6, scale=0.8)
 
         # TODO: plot sf=20
-        #p = ggplot(data_sf, aes(x='qid', ymin=0, ymax=y_axis,  y=y_axis, color='system', fill='system', group='system', shape='overheadType'))
-        p = ggplot(data_sf, aes(x='qid', ymin=0, ymax=y_axis,  y=y_axis, color='system', fill='system', group='system'))
+        p = ggplot(data_sf, aes(x='qid', ymin=0, ymax=y_axis,  y=y_axis, color='system', fill='system', group='system', shape='overheadType'))
         p += geom_point(stat=esc('identity'), alpha=0.8, position=position_dodge(width=0.8), width=0.5, size=2)
         p += geom_linerange(stat=esc('identity'), alpha=0.8, position=position_dodge(width=0.8), width=0.8)
         if y_axis == 'overhead':
             p += axis_labels('Query', "{} (log)".format(header[idx]), "discrete", "log10", ykwargs=dict(breaks=[10, 100, 1000], labels=list(map(esc, ['10', '100', '1000']))))
         else:
-            p += axis_labels('Query', "{} (log)".format(header[idx]), "discrete", "log10", ykwargs=dict(breaks=[20, 100, 1000], labels=list(map(esc, ['20', '100', '1000']))))
+            p += axis_labels('Query', "{} (log)".format(header[idx]), "discrete", "log10", ykwargs=dict(breaks=[10, 100, 1000], labels=list(map(esc, ['10', '100', '1000']))))
             p += geom_hline(aes(yintercept=20, linetype=esc("dotted")))
-            #p += geom_hline(aes(yintercept=10, linetype=esc("dotted")))
         p += legend_side
         p += facet_grid(".~qtype", scales=esc("free_x"), space=esc("free_x"))
         postfix = """data$qid= factor(data$qid, levels=c({}))""".format(queries_order)
-        ggsave("figures/tpch_sample_{}.png".format(y_axis), p, postfix=postfix,  width=14, height=3, scale=0.8)
+        ggsave("figures/tpch_sample_{}.png".format(y_axis), p, postfix=postfix,  width=14, height=3.5, scale=0.8)
     
 q = f"""
 select lineage_type, sf, query,
@@ -184,25 +157,22 @@ print(out)
 
 # TODO summary per system per query per sf per thread
 sf_list = [1, 10, 20]
-for sf in sf_list:
-    for sys in ["SD_Capture", "Logical-RID", "Logical-OPT", "Logical-window"]:
-        print(f"=========== {sys} {sf} ===============")
-        q = f"""
-    select lineage_type, sf, query,
-    avg(exec_roverhead) avg_eroverhead, max(exec_roverhead) max_eroverhead,
-    min(exec_roverhead) min_eroverhead,
-    avg(exec_overhead) avg_eoverhead, max(exec_overhead) max_eoverhead, 
-    avg(mat_roverhead) avg_mroverhead, max(mat_roverhead) max_mroverhead, 
-    avg(mat_overhead) avg_moverhead, max(mat_overhead) max_moverhead, 
-    avg(roverhead) avg_roverhead, max(roverhead) max_roverhead, 
-    from tpch_metrics
-    where  sf={sf} and lineage_type='{sys}' and n_threads=1
-    group by sf, lineage_type, query
-    order by sf, lineage_type, query
-        """
-        out = con.execute(q).df()
-        print(out)
-        print("=================================")
+th_list = con.execute("select distinct n_threads from tpch_metrics order by n_threads").df()
+detailed_summary = True
+if detailed_summary:
+    for sf in sf_list:
+        for sys in ["SD_Capture", "Logical-RID", "Logical-OPT", "Logical-window"]:
+            for th in [1]: #th_list['n_threads']:
+                print(f"=========== {sys} {sf} {th} ===============")
+                q = f"""
+            select lineage_type, sf, query, lineage_count, lineage_size, exec_roverhead, exec_overhead, mat_roverhead, mat_overhead, roverhead, overhead
+            from tpch_metrics
+            where  sf={sf} and lineage_type='{sys}' and n_threads={th}
+            order by sf, lineage_type, query
+                """
+                out = con.execute(q).df()
+                print(out)
+                print("=================================")
 
 
 q = f"""
@@ -218,28 +188,40 @@ order by sf, qtype, lineage_type, n_threads
 out = con.execute(q).df()
 print(out)
 
-for n in [1, 2, 4, 8, 16]:
-    for sf in sf_list:
-        print(f"======== {sf} ==========")
-        # TODO: measure the wins of applying optimizations on logical
-        q = f"""select sf, query, n_threads, sys.output, logical.output, logical.fanout, sys.lineage_type, sys.roverhead, logical.roverhead, logical.roverhead/sys.roverhead, sys.lineage_size, sys.lineage_count
-        from (select * from tpch_metrics where lineage_type='Logical-OPT') as logical JOIN
-             (select * from tpch_metrics where lineage_type IN ('Logical-window', 'SD_Capture')) as sys
-             USING (query, sf, n_threads)
-             where sf={sf} and n_threads={n}
-             order by sys.lineage_type, sf, query, n_threads
-             """
-        print(con.execute(q).df())
-print(f"======== {sf} ==========")
-# TODO: measure the wins of applying optimizations on logical
-q = f"""select sf, sys.lineage_type, n_threads, avg(sys.roverhead), avg(logical.roverhead), 
-avg(logical.roverhead/sys.roverhead), 
-max(logical.roverhead/sys.roverhead), 
-min(logical.roverhead/sys.roverhead), 
-from (select * from tpch_metrics where lineage_type='Logical-OPT') as logical JOIN
- (select * from tpch_metrics where lineage_type IN ('Logical-window', 'SD_Capture')) as sys
- USING (query, sf, n_threads)
- group by  sf, n_threads, sys.lineage_type
- order by sys.lineage_type, sf,  n_threads
- """
-print(con.execute(q).df())
+for sf in sf_list:
+    print(f"======== {sf} ==========")
+    # TODO: measure the wins of applying optimizations on logical
+    q = f"""select sf, query, sys.qtype, n_threads, sys.lineage_type, logical.roverhead/sys.roverhead as speedup
+    from (select * from tpch_metrics where lineage_type='Logical-OPT') as logical JOIN
+         (select * from tpch_metrics where lineage_type IN ('Logical-window', 'SD_Capture')) as sys
+         USING (query, sf, n_threads)
+         where sf={sf} and n_threads=1
+         order by sys.lineage_type, sf, query, n_threads
+         """
+    speedup_df = con.execute(q).df()
+    print(speedup_df)
+
+    q = f"""select sf, qtype, n_threads, lineage_type, avg(speedup), max(speedup), min(speedup) from speedup_df
+            group by sf, qtype, n_threads, lineage_type order by sf, qtype, lineage_type, n_threads
+         """
+    print(con.execute(q).df())
+
+    q = f"""select sf, n_threads, lineage_type, avg(speedup), max(speedup), min(speedup) from speedup_df
+            group by sf, n_threads, lineage_type order by sf, lineage_type, n_threads
+         """
+    print(con.execute(q).df())
+
+print(f"======== lineage size summary ==========")
+print(con.execute("""select sf, lineage_type, avg(lineage_size), max(lineage_size), min(lineage_size) from avg_tpch as t1
+where n_threads=1
+group by sf, lineage_type order by sf, lineage_type
+    """).df())
+
+print(con.execute("""select sf, t1.lineage_type, avg(t1.lineage_size/sd.lineage_size),
+max(t1.lineage_size/sd.lineage_size),
+min(t1.lineage_size/sd.lineage_size)
+from avg_tpch as t1
+join (select * from avg_tpch where lineage_type='SD_Capture' and lineage_size>0) as sd using (sf, query, n_threads)
+where t1.n_threads=1
+group by sf,  t1.lineage_type
+    """).df())

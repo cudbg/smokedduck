@@ -555,43 +555,23 @@ print(con.execute("select distinct operator from global_df").df())
 print(con.execute("select * from global_df").df())
 plot_data = con.execute("select * from global_df where system in ('Perm', 'SmokedDuck') and overheadType='Total'").df()
 
-
-from plotnine import  *
-
-legend = theme_bw() + theme(
-    legend_background=element_blank(),
-    legend_justification=(1, 0),
-    legend_position=(1, 0),  # bottom-right inside plot
-    legend_key=element_blank(),
-    legend_title=element_blank(),
-    text=element_text(color="#333333", size=11, family="DejaVu Sans"),
-    axis_text=element_text(color="#333333", size=11),
-    plot_background=element_blank(),
-    panel_border=element_rect(color="#e0e0e0"),
-    strip_background=element_rect(fill="#efefef", color="#e0e0e0"),
-    strip_text=element_text(color="#333333")
-)
-
-pastel_colors = ['#AEC6CF', '#FFB347', '#B39EB5', '#77DD77', '#FF6961']
-
-p = (
-    ggplot(plot_data, aes(x='label', y='roverhead')) +
-    geom_boxplot(alpha=0.5) +
-    geom_jitter(aes(color='out_ratio'), width=0.2, alpha=0.7) +
-    #scale_color_gradient(low=pastel_colors[2], high=pastel_colors[4]) +
-    scale_fill_gradientn(colors=[
-    '#FFDEE9',  # pastel pink
-    '#E0BBE4',  # pastel purple
-    '#B5FFFC'   # pastel blu
-    ]) +
-    scale_y_log10(breaks=[1, 10, 100], labels=["1", "10", "100"]) +
-    facet_wrap('~system', ncol=1, scales='free_y') +
-    labs(x='Query', y='Relative Overhead (%) [log]') +
-    coord_flip() +
-    legend
-)
-p.save("figures/micro_boxplot{}.png".format(y_axis), width=8, height=10, dpi=300)
+legend_top = legend_bottom + theme(**{
+  "legend.position":esc("top"),
+  "legend.justification":"c(1,1)",
+})
+system_d = { "SmokedDuck": "SD", "Perm": "Logical"}
+plot_data['sys_label'] = plot_data['system'].apply(system_d.get)
+p = ggplot(plot_data, aes(x="roverhead", y="label", color="sys_label", shape="sys_label"))
+#p += geom_point()
+p += geom_jitter(width=0, height=0.1, alpha=0.7)
+p += geom_vline(aes(xintercept=20, linetype=esc("dotted")))
+x_type, y_type, y_label, x_label = "log10", "discrete", "Query", "Relative Overhead (%) [log]"
+xkwargs=dict(breaks=[1, 20,100,1000], labels=list(map(esc,['1','20','100','1000'])))
+p += axis_labels(x_label, "",  x_type, y_type, xkwargs=xkwargs)
+p += legend_top
+ggsave("figures/micro_all.png", p,  width="5", height="4", scale=0.8)
 
 print(con.execute("""select system, operator, overheadType, avg(roverhead), max(roverhead), min(roverhead)
     from global_df group by system, operator, overheadType order by system, operator, overheadType""").df().to_string())
 
+# Plot for each query, the overhead added by each physical operator

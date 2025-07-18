@@ -60,19 +60,21 @@ if run_filter:
     cardinality = [1000000, 5000000, 10000000]
     setting = [False, True]
     for pushdown in setting:
-        for r in range(args.repeat):
-            db_name = 'filter_micro_db.out'
-            if not os.path.exists(db_name):
-                print("init filter_micro_db.out", selectivity, cardinality)
-                con = duckdb.connect(db_name)
-                MicroDataSelective(con, selectivity, cardinality)
-            else:
-                con = duckdb.connect(db_name)
+        for sel, card in product(selectivity, cardinality):
+            for r in range(args.repeat):
+                db_name = 'filter_micro_db.out'
+                if not os.path.exists(db_name):
+                    print("init filter_micro_db.out", selectivity, cardinality)
+                    con = duckdb.connect(db_name)
+                    MicroDataSelective(con, selectivity, cardinality)
+                else:
+                    con = duckdb.connect(db_name)
 
-            con.execute("PRAGMA threads=1")
-            con.execute("drop table if exists t1_perm_lineage")
-            
-            FilterMicro(con, r, args, lineage_type, selectivity, cardinality, filter_results, pushdown)
+                con.execute("PRAGMA threads=1")
+                con.execute("drop table if exists t1_perm_lineage")
+                
+                FilterMicro(con, r, args, lineage_type, [sel], [card], filter_results, pushdown)
+                con.close()
 
 ################### Aggregation ###############################
 ##########################################################
@@ -96,40 +98,43 @@ def VarCharZipfan(con, groups, cardinality, a_list):
 ############################################
 if run_agg:
     groups = [10, 100, 1000]
-    cardinality = [1000000, 5000000, 10000000]
+    cardinality = [10000000, 5000000, 1000000]
     a_list = [1]
-    settings =  [[False, False, False,  "PERFECT_HASH_GROUP_BY"],
-         [False, False, False,  "HASH_GROUP_BY"],
-         [False, False, False,  "VAR"]]
+    settings =  [[False, False, False,  "HASH_GROUP_BY"],
+            [False, False, False,  "VAR"],
+            [False, False, False,  "PERFECT_HASH_GROUP_BY"],
+         ]
 
     if args.perm:
-        settings.append([True, False, False,  "PERFECT_HASH_GROUP_BY"])
         settings.append([True, False, False,  "HASH_GROUP_BY"])
+        settings.append([True, False, False,  "PERFECT_HASH_GROUP_BY"])
         settings.append([True, False, False,  "VAR"])
         settings.append([False, False, True,  "HASH_GROUP_BY"])
         settings.append([False, True, False,  "HASH_GROUP_BY"])
 
     for s in settings:
-        for r in range(args.repeat):
-            db_name = 'micro_agg_db_v2.out'
-            if not os.path.exists(db_name):
-                print("construct micro_agg_db.out", groups, cardinality, a_list)
-                con = duckdb.connect(db_name)
-                MicroDataZipfan(con, groups, cardinality, a_list)
-                VarCharZipfan(con, groups, cardinality, a_list)
-            else:
-                con = duckdb.connect(db_name)
+        for g, card in product(groups, cardinality):
+            for r in range(args.repeat):
+                db_name = 'micro_agg_db_v2.out'
+                if not os.path.exists(db_name):
+                    print("construct micro_agg_db.out", groups, cardinality, a_list)
+                    con = duckdb.connect(db_name)
+                    MicroDataZipfan(con, groups, cardinality, a_list)
+                    VarCharZipfan(con, groups, cardinality, a_list)
+                else:
+                    con = duckdb.connect(db_name)
 
-            con.execute("PRAGMA threads=1")
+                con.execute("PRAGMA threads=1")
 
-            args.list = s[0]
-            args.window = s[1]
-            args.group_concat = s[2]
-            agg_type = s[3]
-            if agg_type == "VAR":
-                hashAgg(con, r, args, lineage_type, groups, cardinality, agg_results)
-            else:
-                int_hashAgg(con, r, args, lineage_type, groups, cardinality, agg_results, agg_type)
+                args.list = s[0]
+                args.window = s[1]
+                args.group_concat = s[2]
+                agg_type = s[3]
+                if agg_type == "VAR":
+                    hashAgg(con, r, args, lineage_type, [g], [card], agg_results)
+                else:
+                    int_hashAgg(con, r, args, lineage_type, [g], [card], agg_results, agg_type)
+                con.close()
 
 ################### Inequality Joins  ############
 # Q = select * from T1, T2 where T1.v < T2.v
@@ -149,19 +154,16 @@ if run_ineq:
     for pred, op, f in zip(preds, ops, flags): 
         for r in range(args.repeat):
             db_name = f'temp_{op}_{r}.out' #join_micro_db.out'
-            con = duckdb.connect(db_name)
-            print(con.execute("pragma show_tables").df())
-
-            con.execute("PRAGMA threads=1")
-            con.execute("drop table if exists PT")
-            con.execute("drop table if exists t2")
-            con.execute("drop table if exists t1")
-            con.execute("drop table if exists zipf1_perm_lineage")
             if op == "CROSS_PRODUCT":
-                join_lessthan(con, r, args, lineage_type, cardinality, join_results, op, f, pred)
+                for card in cardinality:
+                    con = duckdb.connect(db_name)
+                    join_lessthan(con, r, args, lineage_type, [card], join_results, op, f, pred)
+                    con.close()
             else:
-                join_lessthan(con, r, args, lineage_type, cardinality, join_results, op, f, pred, sels)
-
+                for sel, card, in product(sels, cardinality):
+                    con = duckdb.connect(db_name)
+                    join_lessthan(con, r, args, lineage_type, [card], join_results, op, f, pred, [sel])
+                    con.close()
 ################### Join ###################
 # Q = select z, sum(v) from T group by z
 # T = zipf1,g(id int, z int, b float)
@@ -197,29 +199,32 @@ if run_hj_mtn:
     for s in settings:
         for r in range(args.repeat):
             db_name = 'join_mtn_micro_db.out'
-            if not os.path.exists(db_name):
-                con = duckdb.connect(db_name)
-                groups = [5, 10, 100]
-                a_list = [0, 0.5, 0.8, 1]
-                MicroDataZipfan(con, groups, [1000],  a_list)
-                VarCharZipfan(con, groups, [1000], a_list)
-                
-                cardinality = [10000, 100000, 1000000]
-                MicroDataZipfan(con, groups, cardinality,  a_list)
-                VarCharZipfan(con, groups, cardinality, a_list)
-            else:
-                con = duckdb.connect(db_name)
-                print(con.execute("pragma show_tables").df())
-                con.execute("drop table if exists perm_lineage")
-
-            con.execute("PRAGMA threads=1")
-            
             groups = [5, 10, 100]
             a_list = [0, 0.5, 0.8, 1]
             cardinality = [10000, 100000, 1000000]
-
+            cardinality = [10000, 1000000]
             op = "HASH_JOIN"
-            MtM(con, r, args, lineage_type, groups, cardinality, a_list, join_results, op, s)
+            for a, g, card in product(a_list, groups, cardinality):
+                if not os.path.exists(db_name):
+                    con = duckdb.connect(db_name)
+                    groups = [5, 10, 100]
+                    a_list = [0, 0.5, 0.8, 1]
+                    MicroDataZipfan(con, [g], [1000],  [a])
+                    VarCharZipfan(con, [g], [1000], [a])
+                    
+                    cardinality = [10000, 100000, 1000000]
+                    MicroDataZipfan(con, [g], [card],  [a])
+                    VarCharZipfan(con, [g], [card], [a])
+                else:
+                    con = duckdb.connect(db_name)
+                    con.execute("drop table if exists perm_lineage")
+
+                con.execute("PRAGMA threads=1")
+                print(con.execute("PRAGMA metadata_info").df())
+
+                MtM(con, r, args, lineage_type, [g], [card], [a], join_results, op, s)
+                con.close()
+
 
 if args.save:
     df_filter = pd.DataFrame(filter_results)

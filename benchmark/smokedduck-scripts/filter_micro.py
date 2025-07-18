@@ -51,14 +51,6 @@ def FilterMicro(con, iter, args, lineage_type, selectivity, cardinality, results
             "plan_timings": str(plan_timings), "plan": str(plan_full), 'notes': args.notes})
 
         if args.lineage:
-            if args.show_tables:
-                tables = con.execute("PRAGMA show_tables").fetchdf()
-                print(tables)
-                if args.lineage:
-                    for t in tables['name']:
-                        if "LINEAGE" in t:
-                            print(t)
-                            print(con.execute(f"select * from {t}").df())
             con.execute("PRAGMA clear_lineage")
 
     con.execute("PRAGMA enable_filter_pushdown")

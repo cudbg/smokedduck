@@ -254,10 +254,9 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log) {
 		auto ptrs = FlatVector::GetData<data_ptr_t>(state.addresses);
-    data_ptr_t* a  = new data_ptr_t[groups.size()];
+    data_ptr_t* a  = (data_ptr_t*)malloc(sizeof(data_ptr_t) * groups.size());
 	  memcpy(a, ptrs, groups.size() * sizeof(data_ptr_t));
 		active_log->scatter_log.emplace_back(a, groups.size());
-    // TODO: capture child.out_start
 	}
 #endif
 	// Now every cell has an entry, update the aggregates

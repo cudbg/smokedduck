@@ -61,6 +61,8 @@ public:
 		global_logger.clear();
 		operators_ids.clear();
     table_lineage_op.clear();
+    active_log = nullptr;
+    pactive_lop = nullptr;
 	}
 
 public:

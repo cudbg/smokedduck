@@ -1,4 +1,5 @@
 from timeit import default_timer as timer
+import ast
 import random 
 import sys
 import pandas as pd
@@ -46,6 +47,10 @@ def find_node_wprefix(prefix, plan):
             break
     return op_name
 
+def getTime(s):
+    plan = ast.literal_eval(s)
+    return  plan.get('timing', 0)
+
 def getMat(plan):
     """
     return materialization time (sec) from
@@ -53,7 +58,6 @@ def getMat(plan):
     """
     plan= plan.replace("'", "\"")
     plan = json.loads(plan)
-    print(plan)
     op1 = find_node_wprefix("CREATE_TABLE_AS", plan)
     op2 = find_node_wprefix("RESULT_COLLECTOR", plan)
     op3 = find_node_wprefix("BATCH_CREATE_TABLE_AS", plan)
@@ -79,7 +83,6 @@ def parse_plan_timings(qid):
     plan = {}
     with open(plan_fname, 'r') as f:
         plan = json.load(f)
-        print(plan)
         plan_timings = gettimings(plan, {})
         print('X', plan_timings)
     os.remove(plan_fname)
@@ -272,7 +275,7 @@ legend = theme_bw() + theme(**{
 #    libs=['grid']
 legend_bottom = legend + theme(**{
   "legend.position":esc("bottom"),
-  #"legend.spacing": "unit(-.5, 'cm')"
+  "legend.spacing": "unit(-.5, 'cm')"
 
 })
 legend_none = legend + theme(**{"legend.position": esc("none")})

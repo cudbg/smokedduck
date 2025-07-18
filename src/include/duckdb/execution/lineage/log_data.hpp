@@ -167,8 +167,8 @@ class Log {
 public:
 	explicit Log() : capture(false) {}
 
-  std::pair<int, int> LatestLSN();
-  void SetLatestLSN(std::pair<int, int>);
+  std::pair<int, int> LatestLSN() const;
+  void SetLatestLSN(const std::pair<int, int>&);
   ~Log();
   
 public:

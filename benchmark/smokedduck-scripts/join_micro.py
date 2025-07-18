@@ -59,14 +59,6 @@ def MtM(con, iter, args, lineage_type, groups, cardinality, a_list, results, op,
             'postprocess': postprocess, 'lineage_type': lineage_type,
             'plan_timings': str(plan_timings), 'plan': str(plan_full), 'notes': args.notes})
         if args.lineage:
-            if args.show_tables:
-                tables = con.execute("PRAGMA show_tables").fetchdf()
-                print(tables)
-                if args.lineage:
-                    for t in tables['name']:
-                        if "LINEAGE" in t and "SCAN" not in t:
-                            print(t)
-                            print(con.execute(f"select * from {t}").df())
             con.execute("PRAGMA clear_lineage")
     con.execute(f"PRAGMA set_join('clear')")
 
@@ -125,14 +117,6 @@ def FKPK(con, iter, args, lineage_type, groups, cardinality, a_list, results, op
                 'postprocess': postprocess,
                 'lineage_type': lineage_type, 'plan_timings': str(plan_timings), 'plan': str(plan_full), 'notes': args.notes})
             if args.lineage:
-                if args.show_tables:
-                    tables = con.execute("PRAGMA show_tables").fetchdf()
-                    print(tables)
-                    if args.lineage:
-                        for t in tables['name']:
-                            if "LINEAGE" in t and "SCAN" not in t:
-                                print(t)
-                                print(con.execute(f"select * from {t}").df())
                 con.execute("PRAGMA clear_lineage")
         con.execute("drop table PT")
     con.execute(f"PRAGMA set_join('clear')")
@@ -213,6 +197,11 @@ def core_join_less(con, args, pred):
 
 def join_lessthan(con, iter, args, lineage_type, cardinality, results, op, force_join, pred, sels=[0.0]):
     print("------------ Test Join  ", op, pred, force_join)
+    con.execute("PRAGMA threads=1")
+    con.execute("drop table if exists PT")
+    con.execute("drop table if exists t2")
+    con.execute("drop table if exists t1")
+    con.execute("drop table if exists zipf1_perm_lineage")
     if (force_join):
         op_code = "nl"
         if op == "PIECEWISE_MERGE_JOIN":
@@ -248,14 +237,6 @@ def join_lessthan(con, iter, args, lineage_type, cardinality, results, op, force
             'lineage_type': lineage_type, 'plan_timings': str(plan_timings), 'plan': str(plan_full),
             'notes': args.notes})
         if args.lineage:
-            if args.show_tables:
-                tables = con.execute("PRAGMA show_tables").fetchdf()
-                print(tables)
-                if args.lineage:
-                    for t in tables['name']:
-                        if "LINEAGE" in t and "SCAN" not in t:
-                            print(t)
-                            print(con.execute(f"select * from {t}").df())
             con.execute("PRAGMA clear_lineage")
         con.execute("drop table t1")
         con.execute("drop table t2")

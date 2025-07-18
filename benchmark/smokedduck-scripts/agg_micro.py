@@ -65,14 +65,6 @@ def int_hashAgg(con, iter, args, lineage_type, groups, cardinality, results, agg
             'postprocess': postprocess,
             'lineage_type': str(lineage_type)+method, 'plan_timings': str(plan_timings),
             'plan': str(plan_full), 'notes': args.notes})
-        if args.lineage and args.show_tables:
-            tables = con.execute("PRAGMA show_tables").fetchdf()
-            print(tables)
-            if args.lineage:
-                for t in tables['name']:
-                    if "LINEAGE" in t and "HASH" in t:
-                        print(t)
-                        print(con.execute(f"select * from {t}").df())
         if args.lineage:
             con.execute("PRAGMA clear_lineage")
     con.execute("PRAGMA set_agg('clear')")

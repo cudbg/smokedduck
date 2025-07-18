@@ -587,9 +587,9 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			count = approved_tuple_count;
 #ifdef LINEAGE
 			if (lineage_manager->capture && active_log) {
-			  sel_t* sel_copy = new sel_t[count];
+        sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t) * count);
 			  memcpy(sel_copy, sel.data(),  count * sizeof(sel_t));
-				active_log->row_group_log.emplace_back(sel_copy, approved_tuple_count, this->start, current_row);
+				active_log->row_group_log.emplace_back(sel_copy, count, this->start, current_row);
 			}
 #endif
 		}
