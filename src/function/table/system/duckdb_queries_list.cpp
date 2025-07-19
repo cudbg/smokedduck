@@ -95,7 +95,7 @@ string PlanToString(shared_ptr<OperatorLineage> lop) {
   // std::cout << " ################## " << std::endl;
   // std::cout << lop->name << " " << lop->extra << std::endl;
   // std::cout << " ----------------- " << std::endl;
-	return "{\"name\": \"" + lop->name + "\", \"opid\": \"" + std::to_string(lop->operator_id) + "\", \"children\": [" + child_str + "],\"table\": \"" + lop->table_name +  "\",\"extra\": \"" + JSONSanitize(lop->extra)+ "\"}";
+	return "{\"name\": \"" + lop->name + "\", \"opid\": \"" + std::to_string(lop->operator_id) + "\", \"children\": [" + child_str + "],\"extra\": \"" + JSONSanitize(lop->extra)+ "\"}";
 }
 
 //! Create table to store executed queries with their IDs

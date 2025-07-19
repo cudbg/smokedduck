@@ -1,6 +1,7 @@
 add_library_unity(
   duckdb_table_func_system
   OBJECT
+  lineage_view.cpp
   duckdb_queries_list.cpp
   duckdb_columns.cpp
   duckdb_constraints.cpp

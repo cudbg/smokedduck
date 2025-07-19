@@ -238,70 +238,82 @@ void OperatorLineage::PostProcess() {
 
 //! Get the column types for this operator
 //! Returns 1 vector of ColumnDefinitions for each table that must be created
-vector<ColumnDefinition> OperatorLineage::GetTableColumnTypes() {
+void OperatorLineage::GetTableColumnTypes(
+    vector<LogicalType> &return_types, vector<string> &names) {
 	vector<ColumnDefinition> source;
 	switch (type) {
 	case PhysicalOperatorType::COLUMN_DATA_SCAN:
 	case PhysicalOperatorType::FILTER:
 	case PhysicalOperatorType::TABLE_SCAN: {
-    source.emplace_back("in_index", LogicalType::INTEGER);
-    source.emplace_back("out_index", LogicalType::BIGINT);
-    source.emplace_back("partition_index", LogicalType::INTEGER);
+    names.emplace_back("in_index");
+    return_types.emplace_back(LogicalType::INTEGER);
+    names.emplace_back("out_index");
+    return_types.emplace_back(LogicalType::BIGINT);
+    names.emplace_back("partition_index");
+    return_types.emplace_back(LogicalType::INTEGER);
     break;
   }
 	case PhysicalOperatorType::STREAMING_LIMIT:
 	case PhysicalOperatorType::LIMIT:
 	case PhysicalOperatorType::ORDER_BY: {
-    source.emplace_back("in_index", LogicalType::BIGINT);
-    source.emplace_back("out_index", LogicalType::BIGINT);
-    source.emplace_back("partition_index", LogicalType::INTEGER);
+    names.emplace_back("in_index");
+    return_types.emplace_back(LogicalType::BIGINT);
+    names.emplace_back("out_index");
+    return_types.emplace_back(LogicalType::BIGINT);
+    names.emplace_back("partition_index");
+    return_types.emplace_back(LogicalType::INTEGER);
 		break;
 	}
 	case PhysicalOperatorType::HASH_GROUP_BY:
 	case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
-    source.emplace_back("in_index", LogicalType::BIGINT);
-    source.emplace_back("out_index", LogicalType::INTEGER);
-    source.emplace_back("sink_index", LogicalType::INTEGER);
-    source.emplace_back("getdata_index", LogicalType::INTEGER);
+    names.emplace_back("in_index");
+    return_types.emplace_back(LogicalType::BIGINT);
+    names.emplace_back("out_index");
+    return_types.emplace_back(LogicalType::BIGINT);
+    names.emplace_back("sink_index");
+    return_types.emplace_back(LogicalType::INTEGER);
+    names.emplace_back("getdata_index");
+    return_types.emplace_back(LogicalType::INTEGER);
 		break;
 	}
 	case PhysicalOperatorType::CROSS_PRODUCT:
 	case PhysicalOperatorType::BLOCKWISE_NL_JOIN:
 	case PhysicalOperatorType::NESTED_LOOP_JOIN:
 	case PhysicalOperatorType::PIECEWISE_MERGE_JOIN: {
-		source.emplace_back("lhs_index", LogicalType::INTEGER);
-		source.emplace_back("rhs_index", LogicalType::INTEGER);
-		source.emplace_back("out_index", LogicalType::BIGINT);
-    source.emplace_back("sink_index", LogicalType::INTEGER);
-    source.emplace_back("getdata_index", LogicalType::INTEGER);
+    names.emplace_back("lhs_index");
+    return_types.emplace_back(LogicalType::INTEGER);
+    names.emplace_back("rhs_index");
+    return_types.emplace_back(LogicalType::INTEGER);
+    names.emplace_back("out_index");
+    return_types.emplace_back(LogicalType::BIGINT);
+    names.emplace_back("sink_index");
+    return_types.emplace_back(LogicalType::INTEGER);
+    names.emplace_back("getdata_index");
+    return_types.emplace_back(LogicalType::INTEGER);
 		break;
 	}
 	case PhysicalOperatorType::HASH_JOIN:{
-		source.emplace_back("lhs_index", LogicalType::BIGINT);
-		source.emplace_back("rhs_index", LogicalType::BIGINT);
-		source.emplace_back("out_index", LogicalType::BIGINT);
-    source.emplace_back("sink_index", LogicalType::INTEGER);
-    source.emplace_back("getdata_index", LogicalType::INTEGER);
+    names.emplace_back("lhs_index");
+    return_types.emplace_back(LogicalType::BIGINT);
+    names.emplace_back("rhs_index");
+    return_types.emplace_back(LogicalType::BIGINT);
+    names.emplace_back("out_index");
+    return_types.emplace_back(LogicalType::BIGINT);
+    names.emplace_back("sink_index");
+    return_types.emplace_back(LogicalType::INTEGER);
+    names.emplace_back("getdata_index");
+    return_types.emplace_back(LogicalType::INTEGER);
 		break;
 	}
 	default: {
 		// Lineage unimplemented! TODO all of these :)
 	}
 	}
-	return source;
 }
 
 idx_t OperatorLineage::GetLineageAsChunk(DataChunk &insert_chunk,
                         idx_t& global_count, idx_t& local_count,
                         idx_t &thread_id, idx_t &data_idx,  bool &cache) {
-	auto table_types = GetTableColumnTypes();
-	vector<LogicalType> types;
-
-	for (const auto& col_def : table_types) {
-		types.push_back(col_def.GetType());
-	}
-
-	insert_chunk.InitializeEmpty(types);
 	if (thread_vec.size() <= thread_id) {
 		return 0;
 	}
@@ -513,11 +525,11 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
     int tuple_size = log->tuple_size;
     uintptr_t fixed = log->fixed;
     chunk.data[1].Initialize(false, count);
-    int* out_index_ptr = (int*)chunk.data[1].GetData();
+    int64_t* out_index_ptr = (int64_t*)chunk.data[1].GetData();
     for (idx_t j=0; j < count; ++j) {
         data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
         if (log_index->codes.find(key) == log_index->codes.end()) {
-          // std::cout << "gb probe: " <<  count <<  " " << (void*)payload[j] << std::endl;
+          std::cout << "gb probe: " <<  count <<  " " << (void*)payload[j] << std::endl;
         }
         out_index_ptr[j] = (int)log_index->codes[ key ];
     }
@@ -532,11 +544,11 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
     chunk.SetCardinality(count);
     data_ptr_t* payload = log->scatter_log[data_idx].addresses;
     chunk.data[1].Initialize(false, count);
-    int* out_index_ptr = (int*)chunk.data[1].GetData();
+    int64_t* out_index_ptr = (int64_t*)chunk.data[1].GetData();
     for (idx_t j=0; j < count; ++j) {
         data_ptr_t key = payload[j];
         if (log_index->codes.find(key) == log_index->codes.end()) {
-          // std::cout << "gb probe: " <<  count <<  " " << (void*)payload[j] << std::endl;
+          std::cout << "gb probe: " <<  count <<  " " << (void*)payload[j] << std::endl;
         }
         out_index_ptr[j] = (int)log_index->codes[ key ];
     }

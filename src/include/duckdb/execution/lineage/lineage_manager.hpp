@@ -60,7 +60,6 @@ public:
 		query_to_id.clear();
 		global_logger.clear();
 		operators_ids.clear();
-    table_lineage_op.clear();
     active_log = nullptr;
     pactive_lop = nullptr;
 	}
@@ -71,8 +70,6 @@ public:
   std::unordered_map<void*, shared_ptr<OperatorLineage>> global_logger;
   std::unordered_map<void*, int> operators_ids;
 
-  //! map between lineage relational table name and its in-mem lineage
-  std::unordered_map<string, shared_ptr<OperatorLineage>> table_lineage_op;
   std::vector<string> query_to_id;
   std::unordered_map<idx_t, shared_ptr<OperatorLineage>> queryid_to_plan;
   std::mutex glock;

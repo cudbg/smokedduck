@@ -30,12 +30,12 @@ class OperatorLineage;
 class OperatorLineage {
 public:
 	explicit OperatorLineage(void* op, int operator_id, PhysicalOperatorType type, string name)
-	    : op(op), operator_id(operator_id),  processed(false), type(type), name(name), table_name(""), extra(""),
+	    : op(op), operator_id(operator_id),  processed(false), type(type), name(name), extra(""),
       out_start(0), out_end(0) {
         log_index = make_shared_ptr<LogIndex>();
       }
 
-	vector<ColumnDefinition>  GetTableColumnTypes();
+	void  GetTableColumnTypes(vector<LogicalType> &return_types, vector<string> &names);
 
 	idx_t GetLineageAsChunk(DataChunk &insert_chunk,
 	                        idx_t& global_count, idx_t& local_count,
@@ -53,7 +53,6 @@ public:
   bool processed;
   PhysicalOperatorType type;
   string name;
-  string table_name;
   string extra;
   std::vector<shared_ptr<OperatorLineage>> children;
   std::unordered_map<void*, shared_ptr<Log>> log;

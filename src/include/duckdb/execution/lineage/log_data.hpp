@@ -149,7 +149,7 @@ struct bnlj_artifact {
 // NLJ Log
 //
 struct nlj_artifact_uniq {
-  nlj_artifact_uniq(unsafe_unique_array<sel_t> left, unsafe_unique_array<sel_t> right, idx_t count, idx_t current_row_index, idx_t out_star)
+  nlj_artifact_uniq(unsafe_unique_array<sel_t> left, unsafe_unique_array<sel_t> right, idx_t count, idx_t current_row_index, idx_t out_start)
     : left(std::move(left)), right(std::move(right)), count(count), current_row_index(current_row_index), out_start(out_start) {}
   unsafe_unique_array<sel_t> left;
   unsafe_unique_array<sel_t> right;
@@ -182,13 +182,11 @@ public:
 	vector<no_address_artifact> scatter_log;
 	vector<int_address_artifact> int_scatter_log;
 	vector<address_sel_artifact> scatter_sel_log;
-	//vector<address_artifact> gather_log;
 	vector<combine_artifact> combine_log;
 	vector<address_artifact> finalize_states_log;
 	vector<join_gather_artifact> join_gather_log;
   vector<vector<idx_t>> reorder_log;
   vector<cross_artifact> cross_log;
-  //vector<std::array<uint32_t, 5>> no_cross_log;
   vector<nlj_artifact_uniq> nlj_log;
   vector<bnlj_artifact> bnlj_log;
 
