@@ -153,6 +153,10 @@ struct DuckDBQueriesListFun {
 struct LineageViewFun {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
+
+struct LineageQueryFun {
+	static void RegisterFunction(BuiltinFunctions &set);
+};
 #endif
 
 

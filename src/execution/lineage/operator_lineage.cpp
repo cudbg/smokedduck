@@ -4,6 +4,18 @@
 
 namespace duckdb {
 
+shared_ptr<OperatorLineage> GetLop(shared_ptr<OperatorLineage> lop, int opid) {
+	if (lop == nullptr) return nullptr;
+  if (lop->operator_id == opid) return lop;
+
+  for (auto& c : lop->children) {
+    auto ret = GetLop(c, opid);
+    if (ret != nullptr) return ret;
+	}
+
+  return nullptr;
+}
+
   /*
 // add BuildIndexes() 
 // zone map for ResultCollector
@@ -340,6 +352,176 @@ void addOffset(sel_t* ptr, int count, int offset) {
   for (idx_t j=0; j < count; ++j) {
     ptr[j] += offset;
   }
+}
+
+vector<idx_t> OperatorLineage::LQ_single(vector<idx_t>& log_context) {
+  if (log_context.size() < 3) return {};
+  idx_t thread_idx = log_context[0];
+  idx_t lsn = log_context[1];
+  idx_t oid = log_context[2];
+	void* thread_val  = thread_vec[thread_idx];
+  auto& tlog = log[thread_val];
+
+	switch (type) {
+	case PhysicalOperatorType::FILTER: {
+    D_ASSERT(lsn < tlog->filter_log.size());
+    int blsn = tlog->execute_internal[lsn].first-1;
+    int branch = tlog->execute_internal[lsn].second;
+    idx_t in_lsn = 0; // TODO: log->filter_log[lsn].in_lsn and use the same thread_id 
+    idx_t count = 0;
+    if (branch == 0) {
+      count = tlog->filter_log[blsn].count;
+      idx_t offset = tlog->filter_log[blsn].in_start;
+      return { tlog->filter_log[blsn].sel[oid] }; // + offset to get global
+    } else {
+      idx_t offset = tlog->all_filter_log[lsn];
+      return { oid }; // + offset to get global
+    }
+    break;
+  } case PhysicalOperatorType::ORDER_BY: {
+    D_ASSERT(lsn < tlog->reorder_log.size());
+    // TODO: figure out how to recurse to the child
+    return { tlog->reorder_log[lsn][oid] };
+  } case PhysicalOperatorType::TABLE_SCAN: {
+    D_ASSERT(lsn < tlog->row_group_log.size());
+    int count = tlog->row_group_log[lsn].count;
+    idx_t offset = tlog->row_group_log[lsn].start + tlog->row_group_log[lsn].vector_index;
+    if (tlog->row_group_log[lsn].sel) {
+      return { tlog->row_group_log[lsn].sel[oid] + offset };
+    } else {
+      return { oid + offset };
+    }
+  } case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
+    // 1) getdata()
+    D_ASSERT(lsn < tlog->finalize_states_log.size());
+    idx_t res_count = tlog->finalize_states_log[lsn].count;
+    auto payload = tlog->finalize_states_log[lsn].addresses;
+    auto addr = payload[oid];
+    
+    // 2) combine()
+    // look across all threads to see who wrote to payload[oid]
+    // multiple threads could write to addr 
+    vector<pair<idx_t, data_ptr_t>> partition_addr; 
+    for (int i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      shared_ptr<Log>& tlog = log[tkey];
+      for (int k=tlog->combine_log.size()-1; k >= 0; --k) {
+        idx_t res_count = log[tkey]->combine_log[k].count;
+        auto src = log[tkey]->combine_log[k].src;
+        auto target = log[tkey]->combine_log[k].target;
+        bool stop = false;
+        for (idx_t j=0; j < res_count; ++j) {
+          if (addr == target[j]) {
+            partition_addr.push_back({i, target[k]}); 
+            stop = true;
+            break;
+          }
+        }
+        if (stop) break;
+      }
+    }      
+
+    // 3) sink()
+    // 1:N
+    // for each thread_id, addr in partition_addr, start from the end and find all matches
+    vector<idx_t> result;
+    for (auto& p : partition_addr) {
+      idx_t thread_id = p.first;
+      data_ptr_t addr = p.second;
+      for (int i=0; i < thread_vec.size(); i++) {
+        void* tkey = thread_vec[i];
+        shared_ptr<Log>& tlog = log[tkey];
+        idx_t total_count = 0;
+        for (int k=0; k < tlog->int_scatter_log.size(); ++k) {
+          idx_t count = tlog->int_scatter_log[k].count;
+          int* payload = tlog->int_scatter_log[k].addresses;
+          int tuple_size = tlog->tuple_size;
+          uintptr_t fixed = tlog->fixed;
+          for (idx_t j=0; j < count; ++j) {
+            data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
+            if (key == p.second) {
+              result.emplace_back(j + total_count);
+            }
+          }
+          total_count = count;
+        }
+      }
+    }
+    return result;
+  } default: {}	}
+  
+  return {};
+}
+
+vector<idx_t> OperatorLineage::ResolveGlobal(idx_t oid) {
+  // iterate over all partitions
+  // find the one oid IN its range. return: thread_idx, lsn, local_oid
+  vector<idx_t> log_context;
+	switch (type) {
+	case PhysicalOperatorType::FILTER: {
+    for (idx_t i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      shared_ptr<Log>& tlog = log[tkey];
+      for (idx_t lsn=0; lsn  < tlog->execute_internal.size(); ++lsn) {
+        int blsn = tlog->execute_internal[lsn].first-1;
+        int branch = tlog->execute_internal[lsn].second;
+        idx_t count = 0, offset = 0;
+        if (branch == 0) {
+          count = tlog->filter_log[blsn].count;
+          offset = tlog->filter_log[blsn].in_start;
+        } else {
+          count = branch;
+          offset = tlog->all_filter_log[blsn];
+        }
+        if (oid < offset + count && oid >= offset) {
+          return {i, lsn, oid-offset};
+        }
+      }
+    }      
+    break;
+  } case PhysicalOperatorType::ORDER_BY: {
+    for (idx_t i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      shared_ptr<Log>& tlog = log[tkey];
+      for (idx_t lsn=0; lsn  < tlog->reorder_log.size(); ++lsn) {
+          if (tlog->reorder_log[lsn].size() > oid) {// e: vector<idx_t>
+            return {i, lsn, oid};
+          }
+      }
+    }      
+    break;
+  } case PhysicalOperatorType::TABLE_SCAN: {
+    for (idx_t i=0; i < thread_vec.size(); i++) {
+      idx_t offset = 0;
+      void* tkey = thread_vec[i];
+      shared_ptr<Log>& tlog = log[tkey];
+      for (idx_t lsn=0; lsn  < tlog->row_group_log.size(); ++lsn) {
+        int count = tlog->row_group_log[lsn].count;
+        if (oid < offset + count && oid >= offset) {
+          return {i, lsn, oid-offset};
+        }
+        offset += count;
+      }
+    }      
+    break;
+  } case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
+    // 1) getdata()
+    for (idx_t i=0; i < thread_vec.size(); i++) {
+      idx_t offset = 0;
+      void* tkey = thread_vec[i];
+      shared_ptr<Log>& tlog = log[tkey];
+      for (idx_t lsn=0; lsn  < tlog->finalize_states_log.size(); ++lsn) {
+        idx_t count = tlog->finalize_states_log[lsn].count;
+        if (oid > offset && oid < offset + count) {
+          return {i, lsn, oid - offset};
+        }
+      }
+    }
+    break;
+  } default: {}
+	}
+  
+  return {};
 }
 
 idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count, idx_t local_count,

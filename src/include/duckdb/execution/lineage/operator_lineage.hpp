@@ -23,6 +23,8 @@ enum class PhysicalOperatorType : uint8_t;
 class OperatorLineage;
 
 
+shared_ptr<OperatorLineage> GetLop(shared_ptr<OperatorLineage> lop, int opid);
+
 //! OperatorLineage
 /*!
     OperatorLineage is xxx
@@ -36,6 +38,9 @@ public:
       }
 
 	void  GetTableColumnTypes(vector<LogicalType> &return_types, vector<string> &names);
+
+  vector<idx_t> ResolveGlobal(idx_t oid);
+  vector<idx_t> LQ_single(vector<idx_t>& log_context);
 
 	idx_t GetLineageAsChunk(DataChunk &insert_chunk,
 	                        idx_t& global_count, idx_t& local_count,

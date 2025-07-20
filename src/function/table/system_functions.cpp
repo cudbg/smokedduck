@@ -42,6 +42,7 @@ void BuiltinFunctions::RegisterSQLiteFunctions() {
 #ifdef LINEAGE
 	DuckDBQueriesListFun::RegisterFunction(*this);
 	LineageViewFun::RegisterFunction(*this);
+	LineageQueryFun::RegisterFunction(*this);
 #endif
 }
 

@@ -35,19 +35,6 @@ struct LineageViewLocalState : public LocalTableFunctionState {
 	idx_t chunk_index = 0;
 };
 
-shared_ptr<OperatorLineage> GetLop(shared_ptr<OperatorLineage> lop, int opid) {
-	if (lop == nullptr) return nullptr;
-  if (lop->operator_id == opid) return lop;
-
-  for (auto& c : lop->children) {
-    auto ret = GetLop(c, opid);
-    if (ret != nullptr) return ret;
-	}
-
-  return nullptr;
-}
-
-
 static unique_ptr<FunctionData> LineageViewBind(ClientContext &context, TableFunctionBindInput &input,
                                                 vector<LogicalType> &return_types, vector<string> &names) {
   auto result = make_uniq<LineageViewBindData>();
