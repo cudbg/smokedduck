@@ -39,33 +39,14 @@ void OperatorLineage::BuildIndexes() {
 	case PhysicalOperatorType::BLOCKWISE_NL_JOIN:
 	case PhysicalOperatorType::CROSS_PRODUCT:
 	case PhysicalOperatorType::PIECEWISE_MERGE_JOIN: {
+    // oid -> (lsn, thread_id, local_oid)
 		break;
 	}
 	case PhysicalOperatorType::HASH_GROUP_BY:
 	case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
     // the following steps are across multiple functions;
-    // build light weight indexes over the output of each function?
-    //
-    // (1) start from finalize_states; get address for the oid we are looking for
-    // build index[oid] -> k , tkey?
-    //auto payload = log[tkey]->finalize_states_log[k].addresses;
-    // then payload[oid] -> address
-    // (2) use address to get the mapping from combine_log, tkey?
-    // (3) use the local_address 
-    for (int i=0; i < thread_vec.size(); i++) {
-      void* tkey = thread_vec[i];
-      if (log.count(tkey) == 0 || log[tkey]->finalize_states_log.empty()) continue;
-      idx_t count_so_far = 0;
-      idx_t res_count = log[tkey]->finalize_states_log[k].count;
-      // build zone maps; 
-      // zm[tkey][count_so_far+res_count] = k; // tkey is passed from parent
-      // log[tkey]->finalize_states_log[k][i-offset]
-    }      
-    // build for combine log to avoid iterating over the artifacts: index[out_address] -> in_address
-    // find scatter_sel_log[k]->payload[i] == out_address; use (i, k, tkey) to access log that generated it
-    // it depends on the child, if pipeline breaker, then we need to? else?
-    // scatter_sel_log -> for each output id (oid) : index[oid].insert(lsn); // all the unique lsn that includes oid
-    // we get lsn, we look for oid , if we find oid
+    // build light weight indexes over the output of GetData() to Sink()
+    // oid -> (lsn, thread_id, local_oid) accee scatter directly
     break;
   } case PhysicalOperatorType::HASH_JOIN: {
     // getdata() -> ?
@@ -144,7 +125,7 @@ void OperatorLineage::PostProcess() {
         count_so_far += res_count;
       }
       // free gather
-      log[tkey]->finalize_states_log.clear();
+      // log[tkey]->finalize_states_log.clear();
     }      
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
@@ -160,7 +141,7 @@ void OperatorLineage::PostProcess() {
         }
       }
       // free combine
-      log[tkey]->combine_log.clear();
+      // log[tkey]->combine_log.clear();
     }      
 
     // std::cout << " done " << std::endl;
@@ -180,7 +161,7 @@ void OperatorLineage::PostProcess() {
         }
         count_so_far += res_count;
       }
-      log[tkey]->reorder_log.clear();
+      // log[tkey]->reorder_log.clear();
     }
 		break;
 	}
@@ -354,17 +335,19 @@ void addOffset(sel_t* ptr, int count, int offset) {
   }
 }
 
+// TODO: return {thread_idx, lsn} -> [oids]
 vector<idx_t> OperatorLineage::LQ_single(vector<idx_t>& log_context) {
   if (log_context.size() < 3) return {};
   idx_t thread_idx = log_context[0];
   idx_t lsn = log_context[1];
   idx_t oid = log_context[2];
+  std::cout << "LQ_single " << thread_idx << " " << lsn << " " << oid << std::endl;
 	void* thread_val  = thread_vec[thread_idx];
   auto& tlog = log[thread_val];
 
 	switch (type) {
 	case PhysicalOperatorType::FILTER: {
-    D_ASSERT(lsn < tlog->filter_log.size());
+    D_ASSERT(lsn < tlog->execute_internal.size());
     int blsn = tlog->execute_internal[lsn].first-1;
     int branch = tlog->execute_internal[lsn].second;
     idx_t in_lsn = 0; // TODO: log->filter_log[lsn].in_lsn and use the same thread_id 
@@ -377,7 +360,8 @@ vector<idx_t> OperatorLineage::LQ_single(vector<idx_t>& log_context) {
       idx_t offset = tlog->all_filter_log[lsn];
       return { oid }; // + offset to get global
     }
-    break;
+
+    // return  LQ_single(log_context);
   } case PhysicalOperatorType::ORDER_BY: {
     D_ASSERT(lsn < tlog->reorder_log.size());
     // TODO: figure out how to recurse to the child
@@ -391,13 +375,17 @@ vector<idx_t> OperatorLineage::LQ_single(vector<idx_t>& log_context) {
     } else {
       return { oid + offset };
     }
-  } case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
+    // return  LQ_single(log_context);
+  } case PhysicalOperatorType::HASH_GROUP_BY:
+    case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
     // 1) getdata()
     D_ASSERT(lsn < tlog->finalize_states_log.size());
     idx_t res_count = tlog->finalize_states_log[lsn].count;
     auto payload = tlog->finalize_states_log[lsn].addresses;
     auto addr = payload[oid];
     
+    std::cout << oid << " addr:  "  << (void*)addr << " " << res_count << " "  << lsn << std::endl;
+
     // 2) combine()
     // look across all threads to see who wrote to payload[oid]
     // multiple threads could write to addr 
@@ -405,14 +393,21 @@ vector<idx_t> OperatorLineage::LQ_single(vector<idx_t>& log_context) {
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
       shared_ptr<Log>& tlog = log[tkey];
+      std::cout << i << "combine log size  " << tlog->combine_log.size() << std::endl;
+
+      if (tlog->combine_log.size() == 0) {
+        partition_addr.push_back({i, addr});
+      }
+      
       for (int k=tlog->combine_log.size()-1; k >= 0; --k) {
         idx_t res_count = log[tkey]->combine_log[k].count;
         auto src = log[tkey]->combine_log[k].src;
         auto target = log[tkey]->combine_log[k].target;
         bool stop = false;
         for (idx_t j=0; j < res_count; ++j) {
+          std::cout << i << " combine:  "  << (void*)addr << " " << (void*)target[j] << " " << (void*)src[j] << std::endl;
           if (addr == target[j]) {
-            partition_addr.push_back({i, target[k]}); 
+            partition_addr.push_back({i, src[j]}); 
             stop = true;
             break;
           }
@@ -420,40 +415,80 @@ vector<idx_t> OperatorLineage::LQ_single(vector<idx_t>& log_context) {
         if (stop) break;
       }
     }      
+    if (partition_addr.size() == 0) {
+      for (int i=0; i < thread_vec.size(); i++) {
+        void* tkey = thread_vec[i];
+        shared_ptr<Log>& tlog = log[tkey];
+        partition_addr.push_back({i, addr});
+      }
+    }
+      
 
     // 3) sink()
-    // 1:N
-    // for each thread_id, addr in partition_addr, start from the end and find all matches
     vector<idx_t> result;
+    std::cout << "partition_addr : " << partition_addr.size() << std::endl;
     for (auto& p : partition_addr) {
       idx_t thread_id = p.first;
-      data_ptr_t addr = p.second;
+      std::cout << thread_id << " scatter  :  "  << (void*)p.second << std::endl;
       for (int i=0; i < thread_vec.size(); i++) {
         void* tkey = thread_vec[i];
         shared_ptr<Log>& tlog = log[tkey];
         idx_t total_count = 0;
-        for (int k=0; k < tlog->int_scatter_log.size(); ++k) {
-          idx_t count = tlog->int_scatter_log[k].count;
-          int* payload = tlog->int_scatter_log[k].addresses;
-          int tuple_size = tlog->tuple_size;
-          uintptr_t fixed = tlog->fixed;
-          for (idx_t j=0; j < count; ++j) {
-            data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
-            if (key == p.second) {
-              result.emplace_back(j + total_count);
+        if (type == PhysicalOperatorType::HASH_GROUP_BY) {
+          for (int k=0; k < tlog->scatter_log.size(); ++k) {
+            idx_t count = tlog->scatter_log[k].count;
+            data_ptr_t* payload = tlog->scatter_log[k].addresses;
+            for (idx_t j=0; j < count; ++j) {
+              if (payload[j] == p.second) {
+                result.emplace_back(j + total_count);
+              }
             }
+            total_count = count;
           }
-          total_count = count;
+        } else {
+          for (int k=0; k < tlog->int_scatter_log.size(); ++k) {
+            idx_t count = tlog->int_scatter_log[k].count;
+            int* payload = tlog->int_scatter_log[k].addresses;
+            int tuple_size = tlog->tuple_size;
+            uintptr_t fixed = tlog->fixed;
+            for (idx_t j=0; j < count; ++j) {
+              data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
+              if (key == p.second) {
+                result.emplace_back(j + total_count);
+              }
+            }
+            total_count = count;
+          }
         }
       }
     }
+    // return  LQ_single(log_context);
     return result;
+  } case PhysicalOperatorType::HASH_JOIN: {
+    D_ASSERT(lsn < tlog->execute_internal.size());
+    int blsn = tlog->execute_internal[lsn].first-1;
+    if (!tlog->perfect_probe_ht_log.empty()) {
+      idx_t count = tlog->perfect_probe_ht_log[blsn].count;
+      auto left = tlog->perfect_probe_ht_log[blsn].left;
+      auto right = tlog->perfect_probe_ht_log[blsn].right;
+      if (left == nullptr) { return { oid }; } // + in_start to get index into virtual relation
+      else {  return { left[oid] }; }  // + in_start to get index into virtual relation
+      // right:  track right[oid]
+    } else if (!tlog->join_gather_log.empty()) {
+      idx_t count = tlog->join_gather_log[blsn].count;
+      auto payload = tlog->join_gather_log[blsn].rhs;
+      auto lhs = tlog->join_gather_log[blsn].lhs;
+      if (lhs) { return { lhs[oid] }; }
+      // right:  track payload[oid]
+    }
+    // return  LQ_single(log_context);
   } default: {}	}
   
   return {};
 }
 
 vector<idx_t> OperatorLineage::ResolveGlobal(idx_t oid) {
+  std::cout << "ResolveGlobal: " << oid << " " << thread_vec.size() << std::endl;
   // iterate over all partitions
   // find the one oid IN its range. return: thread_idx, lsn, local_oid
   vector<idx_t> log_context;
@@ -483,8 +518,10 @@ vector<idx_t> OperatorLineage::ResolveGlobal(idx_t oid) {
     for (idx_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
       shared_ptr<Log>& tlog = log[tkey];
+      std::cout << "ORDER BY i " << i << " " << tlog->reorder_log.size() << std::endl;
       for (idx_t lsn=0; lsn  < tlog->reorder_log.size(); ++lsn) {
-          if (tlog->reorder_log[lsn].size() > oid) {// e: vector<idx_t>
+          std::cout << "size: " << tlog->reorder_log[lsn].size() << std::endl;
+          if (oid >= 0 && oid < tlog->reorder_log[lsn].size()) {// e: vector<idx_t>
             return {i, lsn, oid};
           }
       }
@@ -504,20 +541,43 @@ vector<idx_t> OperatorLineage::ResolveGlobal(idx_t oid) {
       }
     }      
     break;
-  } case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
+  } case PhysicalOperatorType::HASH_GROUP_BY:
+    case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
     // 1) getdata()
     for (idx_t i=0; i < thread_vec.size(); i++) {
       idx_t offset = 0;
       void* tkey = thread_vec[i];
       shared_ptr<Log>& tlog = log[tkey];
+      std::cout << "GROUP BY i (" << i << ") " << tlog->finalize_states_log.size() << std::endl;
       for (idx_t lsn=0; lsn  < tlog->finalize_states_log.size(); ++lsn) {
         idx_t count = tlog->finalize_states_log[lsn].count;
-        if (oid > offset && oid < offset + count) {
+        std::cout << lsn << " -> " << oid << " " << offset << " " << count << std::endl;
+        if (oid >= offset && oid < offset + count) {
           return {i, lsn, oid - offset};
         }
       }
     }
     break;
+  } case PhysicalOperatorType::HASH_JOIN: {
+    // check across probe find the partition oid belong to
+    for (idx_t i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      shared_ptr<Log>& tlog = log[tkey];
+      idx_t offset = 0;
+      for (idx_t lsn=0; lsn  < tlog->execute_internal.size(); ++lsn) {
+        int blsn = tlog->execute_internal[lsn].first-1;
+        idx_t count = 0;
+        if (!tlog->perfect_probe_ht_log.empty()) {
+          count = tlog->perfect_probe_ht_log[blsn].count;
+        } else if (!tlog->join_gather_log.empty()) {
+          count = tlog->join_gather_log[blsn].count;
+        }
+        if (oid >= offset && oid < offset + count) {
+          return {i, lsn, oid-offset};
+        }
+      }
+    }
+		break;
   } default: {}
 	}
   
