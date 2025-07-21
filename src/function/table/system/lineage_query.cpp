@@ -87,9 +87,14 @@ void LineageQueryFunction(ClientContext &context, TableFunctionInput &data_p, Da
   // 1) resolve global oid: (lsn, thread_id) -> oid
   vector<idx_t> log_context = bdata.lop->ResolveGlobal(oid);
   std::cout << "log_context: " << log_context.size() << std::endl;
-  vector<idx_t> out = bdata.lop->LQ_single(log_context); // TODO: return log_context. use thread_id max:int to indicate leaf node
+  unordered_map<idx_t, vector<idx_t>> oids_per_lsn;
+  oids_per_lsn[log_context[0]] = {log_context[1]};
+
+  // vector<idx_t> out = bdata.lop->LQ(oids_per_lsn); // TODO: return log_context. use thread_id max:int to indicate leaf node
+  vector<vector<idx_t>> out;
+  bdata.lop->LQ_single(oids_per_lsn, out); // TODO: return log_context. use thread_id max:int to indicate leaf node
                                                          // or op: (thread_id, lsn) -> oids
-  ldata.buffer = std::move(out);
+  ldata.buffer = std::move(out.back());
   idx_t count = ldata.buffer.size() > STANDARD_VECTOR_SIZE ? STANDARD_VECTOR_SIZE : ldata.buffer.size();
   output.SetCardinality(count);
 
