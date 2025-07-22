@@ -175,6 +175,7 @@ public:
   bool capture;
 	std::vector<filter_artifact> filter_log;
 	std::vector<int> all_filter_log;
+	std::vector<int> single_int_log;
 	std::vector<limit_artifact> limit_offset;
 	vector<perfect_full_scan_ht_artifact> perfect_full_scan_ht_log;
   vector<perfect_join_artifact> perfect_probe_ht_log;

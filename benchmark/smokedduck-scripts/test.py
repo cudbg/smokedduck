@@ -1,3 +1,9 @@
+# Q2 op 11, 16, 27
+# Q3 (limit), opid 8 -- dubplicates
+# Q5, Q7, Q8, Q9 -- hash join 
+# Q10 opid 13 -- order by
+# Q11 NLJ, limi, ungrouped aggs
+# Q6 ungrouped_aggregate
 from timeit import default_timer as timer
 import json
 import duckdb
@@ -47,10 +53,9 @@ print(q_list)
 # TODO: q16 op21 -> gb probe (need to deal with distinct)
 
 start = timer()
-out = con.execute(f"select * from lineage_query(1, {args.opid}, [0]::UINTEGER[])")
+out = con.execute(f"select * from lineage_query(1, {args.opid}, 0::UINTEGER)")
 end = timer()
 print(end - start)
 print(out.df())
 print(con.execute(f"select * from lineage_view(1, {args.opid})").df())
-print(con.execute(f"select * from lineage_view(1, 0)").df())
 con.execute("PRAGMA clear_lineage")

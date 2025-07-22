@@ -40,7 +40,7 @@ public:
 	void  GetTableColumnTypes(vector<LogicalType> &return_types, vector<string> &names);
 
   vector<idx_t> ResolveGlobal(idx_t oid);
-  void LQ_single(unordered_map<idx_t, vector<idx_t>>& log_context, vector<vector<idx_t>>& iids);
+  void LQ(unordered_map<idx_t, vector<idx_t>>& log_context, vector<vector<idx_t>>& iids);
 
 	idx_t GetLineageAsChunk(DataChunk &insert_chunk,
 	                        idx_t& global_count, idx_t& local_count,

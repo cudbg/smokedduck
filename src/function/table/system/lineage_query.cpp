@@ -14,7 +14,7 @@ struct LineageQueryBindData : public TableFunctionData {
   idx_t qid;
   int opid;
   shared_ptr<OperatorLineage> lop;
-  vector<idx_t> oids;
+  idx_t oid;
 
   void Initialize() {
     qid = -1;
@@ -30,7 +30,7 @@ struct LineageQueryGlobalState : public GlobalTableFunctionState {
 
 struct LineageQueryLocalState : public LocalTableFunctionState {
   idx_t cur;
-  vector<idx_t> buffer;
+  vector<vector<idx_t>> buffer;
 };
 
 
@@ -43,11 +43,7 @@ static unique_ptr<FunctionData> LineageQueryBind(ClientContext &context, TableFu
 
   result->qid = input.inputs[0].GetValue<int>();
   result->opid = input.inputs[1].GetValue<int>();
-  auto list_values = ListValue::GetChildren(input.inputs[2]) ;
-	for (idx_t i = 0; i < list_values.size(); i++) {
-		auto &child = list_values[i];
-    result->oids.push_back(child.GetValue<idx_t>());
-	}
+  result->oid = input.inputs[2].GetValue<int>();
 
   // read and initalize idx_t qid; idx_t opid;
   auto lop = lineage_manager->queryid_to_plan[result->qid];
@@ -81,24 +77,24 @@ void LineageQueryFunction(ClientContext &context, TableFunctionInput &data_p, Da
   auto &bdata = data_p.bind_data->CastNoConst<LineageQueryBindData>();
   if (!lineage_manager || !bdata.lop) return; 
   // TODO: distribute oids to different locals
-  if (ldata.cur >= bdata.oids.size()) return;
-  idx_t oid = bdata.oids[ldata.cur++];
+  idx_t oid = bdata.oid;
+  if (ldata.cur == 0) {
+    // 1) resolve global oid: (lsn, thread_id) -> oid
+    vector<idx_t> log_context = bdata.lop->ResolveGlobal(oid);
+    unordered_map<idx_t, vector<idx_t>> oids_per_lsn;
+    oids_per_lsn[log_context[0]] = {log_context[1]};
+    vector<vector<idx_t>> out;
+    bdata.lop->LQ(oids_per_lsn, out);
+    if (out.empty()) return;
+    ldata.buffer = std::move(out);
+  }
+  
+  if (ldata.cur >= ldata.buffer.size()) return;
 
-  // 1) resolve global oid: (lsn, thread_id) -> oid
-  vector<idx_t> log_context = bdata.lop->ResolveGlobal(oid);
-  std::cout << "log_context: " << log_context.size() << std::endl;
-  unordered_map<idx_t, vector<idx_t>> oids_per_lsn;
-  oids_per_lsn[log_context[0]] = {log_context[1]};
-
-  // vector<idx_t> out = bdata.lop->LQ(oids_per_lsn); // TODO: return log_context. use thread_id max:int to indicate leaf node
-  vector<vector<idx_t>> out;
-  bdata.lop->LQ_single(oids_per_lsn, out); // TODO: return log_context. use thread_id max:int to indicate leaf node
-                                                         // or op: (thread_id, lsn) -> oids
-  ldata.buffer = std::move(out.back());
-  idx_t count = ldata.buffer.size() > STANDARD_VECTOR_SIZE ? STANDARD_VECTOR_SIZE : ldata.buffer.size();
+  auto& cur_buffer = ldata.buffer[ldata.cur++];
+  idx_t count = cur_buffer.size() > STANDARD_VECTOR_SIZE ? STANDARD_VECTOR_SIZE : cur_buffer.size();
   output.SetCardinality(count);
-
-  data_ptr_t ptr = (data_ptr_t)(ldata.buffer.data());
+  data_ptr_t ptr = (data_ptr_t)(cur_buffer.data());
   Vector in_index(LogicalType::BIGINT, ptr);
   output.data[0].Reference(in_index); // in_index
 
@@ -109,7 +105,7 @@ void LineageQueryFunction(ClientContext &context, TableFunctionInput &data_p, Da
 void LineageQueryFun::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(TableFunction("lineage_query",
         {duckdb::LogicalType::INTEGER, duckdb::LogicalType::INTEGER,
-        LogicalType::LIST(LogicalType::UINTEGER)},
+        LogicalType::UINTEGER},
         LineageQueryFunction, LineageQueryBind, LineageQueryGlobalInit, LineageQueryLocalInit));
 }
 

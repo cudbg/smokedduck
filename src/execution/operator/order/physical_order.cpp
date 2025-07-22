@@ -78,6 +78,7 @@ SinkResultType PhysicalOrder::Sink(ExecutionContext &context, DataChunk &chunk, 
 	auto &gstate = input.global_state.Cast<OrderGlobalSinkState>();
 	auto &lstate = input.local_state.Cast<OrderLocalSinkState>();
   
+#ifdef LINEAGE
   if (lineage_manager && lineage_manager->smoke) {
     if (chunk.ColumnCount() < lstate.payload.ColumnCount()) {
       DataChunk annotations;
@@ -89,6 +90,7 @@ SinkResultType PhysicalOrder::Sink(ExecutionContext &context, DataChunk &chunk, 
       chunk.data[chunk.ColumnCount()-1].Sequence(0, 1, chunk.size());
     }
   }
+#endif
 
 	auto &global_sort_state = gstate.global_sort_state;
 	auto &local_sort_state = lstate.local_sort_state;
@@ -110,6 +112,11 @@ SinkResultType PhysicalOrder::Sink(ExecutionContext &context, DataChunk &chunk, 
 	keys.Verify();
 	chunk.Verify();
 	local_sort_state.SinkChunk(keys, payload);
+#ifdef LINEAGE
+  if (lineage_manager->capture && active_log) {
+    active_log->single_int_log.emplace_back(keys.size());
+  }
+#endif
 
 	// When sorting data reaches a certain size, we sort it
 	if (local_sort_state.SizeInBytes() >= gstate.memory_per_thread) {
@@ -276,6 +283,7 @@ SourceResultType PhysicalOrder::GetData(ExecutionContext &context, DataChunk &ch
 
 	lstate.scanner->Scan(chunk);
 
+#ifdef LINEAGE
   if (lineage_manager && lineage_manager->smoke) {
     DataChunk annotations;
     chunk.Split(annotations, chunk.ColumnCount()-1);
@@ -286,6 +294,7 @@ SourceResultType PhysicalOrder::GetData(ExecutionContext &context, DataChunk &ch
     newAnn.Initialize(context.client, typ, chunk.size());
     chunk.Fuse(newAnn);
   }
+#endif
 
 	return chunk.size() == 0 ? SourceResultType::FINISHED : SourceResultType::HAVE_MORE_OUTPUT;
 }
