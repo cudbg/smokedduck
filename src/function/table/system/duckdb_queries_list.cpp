@@ -102,6 +102,7 @@ string PlanToString(shared_ptr<OperatorLineage> lop) {
 //! Table name: queries_list
 //! Schema: (INT query_id, varchar query)
 void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+  std::cout << "duckdbquerieslist" << std::endl;
 	auto &data = data_p.global_state->Cast<DuckDBQueriesListData>();
   if (!lineage_manager) return; 
 	auto query_to_id = lineage_manager->query_to_id;

@@ -115,10 +115,10 @@ OperatorResultType CrossProductExecutor::Execute(DataChunk &input, DataChunk &ou
 		ConstantVector::Reference(output.data[col_offset + i], scan.data[i], position_in_chunk, scan.size());
 	}
 #ifdef LINEAGE
-  if (lineage_manager->capture && active_log && pactive_lop) {
+  if (lineage_manager->capture && active_log) {
 			active_log->cross_log.emplace_back(position_in_chunk,
           scan_state.current_row_index, scan.size(),
-          pactive_lop->children[0]->out_start, scan_input_chunk);
+          active_log->in_start, scan_input_chunk);
       active_log->latest.first = active_log->cross_log.size();
   }
 #endif

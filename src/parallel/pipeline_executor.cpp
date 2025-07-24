@@ -35,18 +35,22 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	local_source_state = pipeline.source->GetLocalSourceState(context, *pipeline.source_state);
 
 #ifdef LINEAGE
+  Log* prev_log = nullptr;
     if (lineage_manager && lineage_manager->capture && pipeline.source->lop) {
-      lineage_manager->InitLog(pipeline.source->lop, (void*)&context.thread);
+      prev_log = lineage_manager->InitLog(pipeline.source->lop, (void*)&context.thread);
+     // std::cout << (void*)&context.thread << " Source InitLog: " << pipeline.source->lop->operator_id << " " << (void*)prev_log << std::endl;
     }
 #endif
 	intermediate_chunks.reserve(pipeline.operators.size());
 	intermediate_states.reserve(pipeline.operators.size());
+
 	for (idx_t i = 0; i < pipeline.operators.size(); i++) {
 		auto &prev_operator = i == 0 ? *pipeline.source : pipeline.operators[i - 1].get();
 		auto &current_operator = pipeline.operators[i].get();
 #ifdef LINEAGE
-    if (lineage_manager && lineage_manager->capture && current_operator.lop) {
-      lineage_manager->InitLog(current_operator.lop, (void*)&context.thread);
+    if (lineage_manager && lineage_manager->capture && current_operator.type != PhysicalOperatorType::PROJECTION && current_operator.lop) {
+      //std::cout << (void*)&context.thread << " InitLog: " << current_operator.lop->operator_id << " " << (void*)prev_log << std::endl;
+      prev_log = lineage_manager->InitLog(current_operator.lop, (void*)&context.thread, prev_log);
     }
 #endif
 
@@ -430,6 +434,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			// if current_idx > source_idx, we pass the previous operators' output through the Execute of the current
 			// operator
 			StartOperator(current_operator);
+      // if active_log, then new_active_log->in_lsn = active_log->out_lsn
 			auto result = current_operator.Execute(context, prev_chunk, current_chunk, *current_operator.op_state,
 			                                       *intermediate_states[current_intermediate - 1]);
 			EndOperator(current_operator, &current_chunk);
@@ -536,18 +541,19 @@ void PipelineExecutor::StartOperator(PhysicalOperator &op) {
 		throw InterruptException();
 	}
 #ifdef LINEAGE
-	// lineage_manager->Set((void*)&op, (void*)&context.thread);
-	lineage_manager->SetP(op.lop.get(), (void*)&context.thread);
+  if (lineage_manager && lineage_manager->capture && op.type != PhysicalOperatorType::PROJECTION) {
+	  lineage_manager->SetP(op.lop.get(), (void*)&context.thread);
+  }
 #endif
 	context.thread.profiler.StartOperator(&op);
 }
 
 void PipelineExecutor::EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk) {
 #ifdef LINEAGE
-  if (lineage_manager->capture && pactive_lop && chunk) {
-    // TODO: make this local to the thread
-    pactive_lop->out_start = pactive_lop->out_end;
-    pactive_lop->out_end += chunk->size() ;
+  if (lineage_manager->capture && active_log && chunk && op.type != PhysicalOperatorType::PROJECTION) {
+    active_log->out_start = active_log->out_end;
+    active_log->out_end += chunk->size() ;
+    if (chunk->size() != 0) ++active_log->out_lsn;
     //std::cout << "EndOperator: " << active_lop->operator_id << " " -> active_lop->out_end << " " << chunk.size() << std::endl;
   }
 	lineage_manager->Reset();

@@ -12,25 +12,28 @@ namespace duckdb {
 
 unique_ptr<LineageManager> lineage_manager;
 thread_local Log* active_log;
-thread_local OperatorLineage* pactive_lop;
 
-void LineageManager::InitLog(shared_ptr<OperatorLineage> lop, void* thread_id) {
-  if (!capture || lop == nullptr) return;
+Log* LineageManager::InitLog(shared_ptr<OperatorLineage> lop, void* thread_id, Log* child_log) {
+  if (!capture || !lop) return nullptr;
 
   std::lock_guard<std::mutex> lock(lop->glock);
   if (lop->log.count(thread_id) == 0) {
   //  std::cout << lop->operator_id << " " << thread_id << std::endl;
-    lop->log[thread_id] = make_uniq<Log>();
+    auto log = make_uniq<Log>();
+    if (child_log) log->child_log = child_log;
+    lop->log[thread_id] = std::move(log);
     if (lop->type == PhysicalOperatorType::RIGHT_DELIM_JOIN || lop->type == PhysicalOperatorType::LEFT_DELIM_JOIN) {
 		  for (auto c : lop->children) {
         std::lock_guard<std::mutex> lock(c->glock);
         if (c->log.count(thread_id) == 0) {
-       // std::cout << c->operator_id << " delim " << thread_id << std::endl;
           c->log[thread_id] = make_uniq<Log>();
         }
       }
     }
+  } else {
+    if (child_log) lop->log[thread_id]->child_log = child_log;
   }
+  return lop->log[thread_id].get();
 }
 
 shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext &context, PhysicalOperator *op) {
@@ -99,7 +102,6 @@ void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator 
 	query_to_id.push_back(query);
 	queryid_to_plan[query_id] = lineage_manager->global_logger[(void *)op];
   active_log = nullptr;
-  pactive_lop = nullptr;
 }
 
 void LineageManager::PostProcess(shared_ptr<OperatorLineage> lop) {
@@ -125,6 +127,25 @@ std::vector<int64_t> LineageManager::GetStats(shared_ptr<OperatorLineage> lop) {
 	}
 
   return {lineage_size_mb, count, nchunks};
+}
+  
+void LineageManager::SetP(OperatorLineage* lop, void* thread_id) {
+		if (!capture || !lop) return;
+    if (!lop->children.empty()) SetChild(lop->children[0].get(), thread_id);
+		std::lock_guard<std::mutex> lock(lop->glock);
+		active_log = lop->log[thread_id].get();
+    return;
+}
+
+// TODO: log per pipeline lop[op]
+void LineageManager::SetChild(OperatorLineage* lop, void* thread_id) {
+		if (!capture || lop) return;
+		std::lock_guard<std::mutex> lock(lop->glock);
+    auto it = lop->log.find(thread_id);
+    if (it != lop->log.end()) {
+        active_log = it->second.get();
+    }
+    return;
 }
 
 } // namespace duckdb

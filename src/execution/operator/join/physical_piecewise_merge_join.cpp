@@ -649,14 +649,14 @@ OperatorResultType PhysicalPiecewiseMergeJoin::ResolveComplexJoin(ExecutionConte
 				}
 			}
 #ifdef LINEAGE
-      if (lineage_manager->capture && active_log && pactive_lop) {
+      if (lineage_manager->capture && active_log) {
         //left_info.result.Slice(*sel, result_count);
         //right_info.result.Slice(*sel, result_count);
 			  if (tail_cols) {
           // copy sel
         }
         active_log->nlj_log.emplace_back(move(left_info.result.sel_data()->owned_data), move(right_info.result.sel_data()->owned_data), result_count, 
-             state.right_base, pactive_lop->children[0]->out_start);
+             state.right_base, active_log->in_start);
         active_log->latest.first = active_log->nlj_log.size();
         active_log->latest.second = 0;
       }

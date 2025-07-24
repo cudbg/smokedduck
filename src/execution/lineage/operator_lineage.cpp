@@ -346,23 +346,16 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 	case PhysicalOperatorType::FILTER: {
     if (data_idx >= log->filter_log.size()) return 0;
     int lsn = log->execute_internal[data_idx].first-1;
-    int branch = log->execute_internal[data_idx].second;
-    // std::cout << "filter: " << data_idx << " " << lsn << std::endl;
     idx_t count = 0;
     idx_t offset = 0;
     data_ptr_t ptr = nullptr;
-    if (branch == 0) {
-      count = log->filter_log[lsn].count;
-      offset = log->filter_log[lsn].in_start;
-      if (log->filter_log[lsn].sel) {
-        ptr = (data_ptr_t)log->filter_log[lsn].sel;
-      }
-    } else {
-      count = branch;
-      offset = log->all_filter_log[lsn];
+    count = log->filter_log[lsn].count;
+    offset = log->filter_log[lsn].in_start;
+    if (log->filter_log[lsn].sel) {
+      ptr = (data_ptr_t)log->filter_log[lsn].sel;
     }
-    chunk.SetCardinality(count);
     // TODO: in_index should reference an expression in_index + offset
+    chunk.SetCardinality(count);
     if (ptr != nullptr) {
       // TODO: add flag to log
       addOffset((sel_t*)ptr, count, offset);

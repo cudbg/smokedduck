@@ -253,6 +253,16 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
                                                     GlobalOperatorState &gstate, OperatorState &state_p) const {
 	auto &state = state_p.Cast<CachingOperatorState>();
 
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log && !active_log->child_log) {
+      std::cout << "no child: " << lop->operator_id << std::endl;
+    }
+    if (lineage_manager->capture && active_log && active_log->child_log) {
+      active_log->latest.second = active_log->child_log->out_lsn;
+      active_log->in_start = active_log->child_log->out_start;
+      //std::cout << lop->operator_id << " " << "in_lsn: " << active_log->latest.second << " " << active_log->in_start << std::endl;
+    }
+#endif
 	// Execute child operator
 	auto child_result = ExecuteInternal(context, input, chunk, gstate, state);
 
@@ -261,9 +271,8 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 		state.initialized = true;
 		state.can_cache_chunk = caching_supported && PhysicalOperator::OperatorCachingAllowed(context);
 	}
-	if (!state.can_cache_chunk) {
+	if (true || !state.can_cache_chunk) {
 #ifdef LINEAGE
-    // ---> active_log->SetLatestLSN(); // {lsn:int, fname:int}
     if (lineage_manager->capture && active_log && chunk.size() > 0) {
       active_log->execute_internal.emplace_back(active_log->latest);
     }

@@ -59,7 +59,7 @@ static void ConstructSemiOrAntiJoinResult(DataChunk &left, DataChunk &result, bo
 		result.Slice(left, sel, result_count);
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log) {
-//		  active_log->row_group_log.push_back({sel.sel_data(), result_count, 0, active_lop->children[0]->out_start});
+//		  active_log->row_group_log.push_back({sel.sel_data(), result_count, 0, active_lop->children[0]->in_start});
     }
 #endif
 	} else {
@@ -415,9 +415,9 @@ OperatorResultType PhysicalNestedLoopJoin::ResolveComplexJoin(ExecutionContext &
 			chunk.Slice(input, lvector, match_count);
 			chunk.Slice(right_payload, rvector, match_count, input.ColumnCount());
 #ifdef LINEAGE
-      if (lineage_manager->capture && active_log && pactive_lop) {
+      if (lineage_manager->capture && active_log) {
         active_log->nlj_log.emplace_back(move(lvector.sel_data()->owned_data), move(rvector.sel_data()->owned_data), match_count, 
-             state.condition_scan_state.current_row_index, pactive_lop->children[0]->out_start);
+             state.condition_scan_state.current_row_index, active_log->in_start);
         active_log->latest.first = active_log->nlj_log.size();
       }
 #endif
@@ -483,11 +483,11 @@ SourceResultType PhysicalNestedLoopJoin::GetData(ExecutionContext &context, Data
 	// if the LHS is exhausted in a FULL/RIGHT OUTER JOIN, we scan chunks we still need to output
 	sink.right_outer.Scan(gstate.scan_state, lstate.scan_state, chunk);
 #ifdef LINEAGE
-  if (lineage_manager->capture && active_log && pactive_lop) {
+  if (lineage_manager->capture && active_log) {
     sel_t* sel_copy = new sel_t[chunk.size()];
     memcpy(sel_copy, lstate.scan_state.match_sel.data(),  chunk.size() * sizeof(sel_t));
     active_log->row_group_log.push_back({sel_copy, chunk.size(),
-        lstate.scan_state.local_scan.current_row_index, pactive_lop->children[0]->out_start});
+        lstate.scan_state.local_scan.current_row_index, 0});
     // TODO: add to latest
   }
 #endif

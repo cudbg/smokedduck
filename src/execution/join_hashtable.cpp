@@ -543,7 +543,7 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
 			}
 		}
 #ifdef LINEAGE
-    if (lineage_manager->capture && active_log && pactive_lop && result_count > 0) {
+    if (lineage_manager->capture && active_log && result_count > 0) {
       auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
       data_ptr_t* rhs_ptrs = (data_ptr_t*)malloc(sizeof(data_ptr_t)*result_count);
       //memcpy(rhs_ptrs, ptrs, count*sizeof(data_ptr_t));
@@ -553,9 +553,9 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
       }
       sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t)*result_count);
       memcpy(sel_copy, result_vector.data(), result_count*sizeof(sel_t));
-      // std::cout << active_lop->operator_id << " not perfect " << count << " " << active_lop->out_start << std::endl;
-      active_log->join_gather_log.emplace_back(rhs_ptrs, sel_copy, result_count, pactive_lop->children[0]->out_start);
-      active_log->SetLatestLSN({active_log->join_gather_log.size(), 1});
+      // std::cout << active_lop->operator_id << " not perfect " << count << " " << active_lop->in_start << std::endl;
+      active_log->join_gather_log.emplace_back(rhs_ptrs, sel_copy, result_count, active_log->in_start);
+      active_log->latest.first = active_log->join_gather_log.size();
     }
 #endif
 		AdvancePointers();
@@ -602,10 +602,10 @@ void ScanStructure::NextSemiOrAntiJoin(DataChunk &keys, DataChunk &left, DataChu
 		// reference the columns of the left side from the result
 		result.Slice(left, sel, result_count);
 #ifdef LINEAGE
-		if (lineage_manager->capture && active_log && pactive_lop) {
+		if (lineage_manager->capture && active_log) {
 			sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t)*result_count);
 			std::copy(sel.data(), sel.data() + result_count, sel_copy);
-			active_log->join_gather_log.emplace_back(nullptr, sel_copy, result_count, pactive_lop->children[0]->out_start);
+			active_log->join_gather_log.emplace_back(nullptr, sel_copy, result_count, active_log->in_start);
 		}
 #endif
 	} else {
@@ -768,13 +768,13 @@ void ScanStructure::NextLeftJoin(DataChunk &keys, DataChunk &left, DataChunk &re
 			// slice the left side with tuples that did not find a match
 			result.Slice(left, sel, remaining_count);
 #ifdef LINEAGE
-			if (lineage_manager->capture && active_log && pactive_lop) {
+			if (lineage_manager->capture && active_log) {
 				sel_t* sel_copy = nullptr;
         if (remaining_count < STANDARD_VECTOR_SIZE) {
           sel_copy = (sel_t*)malloc(sizeof(sel_t)*remaining_count);
 				  std::copy(sel.data(), sel.data() + remaining_count, sel_copy);
         }
-				active_log->join_gather_log.emplace_back(nullptr, sel_copy, remaining_count, pactive_lop->children[0]->out_start);
+				active_log->join_gather_log.emplace_back(nullptr, sel_copy, remaining_count, active_log->in_start);
 			}
 #endif
 
@@ -832,13 +832,13 @@ void ScanStructure::NextSingleJoin(DataChunk &keys, DataChunk &input, DataChunk 
 	}
 	result.SetCardinality(input.size());
 #ifdef LINEAGE
-	if (lineage_manager->capture && active_log && pactive_lop) {
+	if (lineage_manager->capture && active_log) {
 		auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
     data_ptr_t* rhs_ptrs = (data_ptr_t*)malloc(sizeof(data_ptr_t) * result_count);
 		std::copy(ptrs, ptrs + result_count , rhs_ptrs);
 		sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t) * result_count);
 		std::copy(result_sel.data(), result_sel.data() + result_count, sel_copy);
-		active_log->join_gather_log.emplace_back(rhs_ptrs, sel_copy, result_count, pactive_lop->children[0]->out_start);
+		active_log->join_gather_log.emplace_back(rhs_ptrs, sel_copy, result_count, active_log->in_start);
 	}
 #endif
 
@@ -909,11 +909,11 @@ void JoinHashTable::ScanFullOuter(JoinHTScanState &state, Vector &addresses, Dat
 		data_collection->Gather(addresses, sel_vector, found_entries, output_col_idx, vector, sel_vector, nullptr);
 	}
 #ifdef LINEAGE
-	if (lineage_manager->capture && active_log && pactive_lop) {
+	if (lineage_manager->capture && active_log) {
     data_ptr_t* rhs_ptrs = (data_ptr_t*)malloc(sizeof(data_ptr_t)*found_entries);
 		std::copy(key_locations, key_locations + found_entries, rhs_ptrs);
-		active_log->join_gather_log.emplace_back(rhs_ptrs, nullptr, found_entries, pactive_lop->children[0]->out_start);
-    active_log->SetLatestLSN({active_log->join_gather_log.size(), 2});
+		active_log->join_gather_log.emplace_back(rhs_ptrs, nullptr, found_entries, 0);
+    active_log->latest.first = active_log->join_gather_log.size();
     active_log->execute_internal.push_back(active_log->LatestLSN());
 	}
 #endif

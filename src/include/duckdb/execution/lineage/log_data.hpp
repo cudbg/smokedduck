@@ -165,8 +165,7 @@ struct nlj_artifact_uniq {
 */
 class Log {
 public:
-	explicit Log() : capture(false) {}
-
+	explicit Log() : capture(false), tuple_size(0), fixed(0), out_start(0), out_end(0), in_start(0), out_lsn(0), in_lsn(0), child_log(nullptr) {}
   std::pair<int, int> LatestLSN() const;
   void SetLatestLSN(const std::pair<int, int>&);
   ~Log();
@@ -195,8 +194,16 @@ public:
   vector<std::pair<int, int>> cached;
 
   std::pair<int, int> latest;
-  int tuple_size = 0;
-  uintptr_t fixed = 0;
+  int tuple_size;
+  uintptr_t fixed;
+
+  idx_t out_start;
+  idx_t out_end;
+  idx_t in_start;
+
+  idx_t out_lsn;
+  idx_t in_lsn;
+  Log* child_log;
 private:
 };
 

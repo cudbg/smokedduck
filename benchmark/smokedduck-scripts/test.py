@@ -1,9 +1,7 @@
-# Q2 op 11, 16, 27
-# Q3 (limit), opid 8 -- dubplicates
-# Q5, Q7, Q8, Q9 -- hash join 
-# Q10 opid 13 -- order by
+# Q2 op 16, 27
 # Q11 NLJ, limi, ungrouped aggs
 # Q6 ungrouped_aggregate
+# Q22 opid 19
 from timeit import default_timer as timer
 import json
 import duckdb

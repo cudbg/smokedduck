@@ -20,7 +20,6 @@ class LineageManager;
 // Declaration of the global and thread_local variables
 extern unique_ptr<LineageManager> lineage_manager;
 extern thread_local Log* active_log;
-extern thread_local OperatorLineage* pactive_lop;
 
 //! LineageManager
 /*!
@@ -35,20 +34,13 @@ public:
 	void StoreQueryLineage(ClientContext &context, PhysicalOperator* op, string query);
 	void Reset() {
 		active_log = nullptr;
-    pactive_lop = nullptr;
 	}
 
-  void InitLog(shared_ptr<OperatorLineage> lop, void* thread_id);
+  Log* InitLog(shared_ptr<OperatorLineage> lop, void* thread_id, Log* child=nullptr);
   
-  void SetP(OperatorLineage* lop, void* thread_id) {
-		if (!capture || lop == nullptr) return;
-    pactive_lop = lop;
-		std::lock_guard<std::mutex> lock(lop->glock);
-		active_log = pactive_lop->log[thread_id].get();
-    // TODO: access child log to get out_start
-    return;
+  void SetP(OperatorLineage* lop, void* thread_id);
 
-	}
+  void SetChild(OperatorLineage* lop, void* thread_id);
 
   void PostProcess(shared_ptr<OperatorLineage> lop);
 
@@ -60,8 +52,6 @@ public:
 		query_to_id.clear();
 		global_logger.clear();
 		operators_ids.clear();
-    active_log = nullptr;
-    pactive_lop = nullptr;
 	}
 
 public:
