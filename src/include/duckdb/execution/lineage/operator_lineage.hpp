@@ -40,7 +40,7 @@ public:
 	void  GetTableColumnTypes(vector<LogicalType> &return_types, vector<string> &names);
 
   vector<idx_t> ResolveGlobal(idx_t oid);
-  void LQ(unordered_map<idx_t, vector<idx_t>>& log_context, vector<vector<idx_t>>& iids);
+  void LQ(unordered_map<idx_t, vector<idx_t>>& log_context, unordered_map<idx_t, vector<vector<idx_t>>>& iids, bool all=false);
 
 	idx_t GetLineageAsChunk(DataChunk &insert_chunk,
 	                        idx_t& global_count, idx_t& local_count,
@@ -49,7 +49,11 @@ public:
   vector<vector<idx_t>> Backward(idx_t local_oid, idx_t data_idx,  shared_ptr<Log> log);
 
 	void PostProcess();
+  void BuildIndexes();
   std::vector<int64_t> GatherStats();
+  void get_right_match(vector<data_ptr_t>& in_key, unordered_map<idx_t, vector<idx_t>>& out_log_context);
+  
+  void get_perfect_right_match(vector<sel_t>& in_key, vector<data_ptr_t>& scatter_keys);
   
 
 public:
@@ -62,7 +66,13 @@ public:
   std::vector<shared_ptr<OperatorLineage>> children;
   std::unordered_map<void*, shared_ptr<Log>> log;
   std::vector<void*> thread_vec;
+  
   shared_ptr<LogIndex> log_index;
+  
+  unordered_map<data_ptr_t, std::pair<idx_t, idx_t>> scatter_sel_log_index;
+  unordered_map<sel_t, data_ptr_t> perfect_full_scan_ht_index;
+  unordered_map<data_ptr_t, vector<std::pair<idx_t, data_ptr_t>>> partition_addr_index;
+
   idx_t out_start;
   idx_t out_end;
   std::mutex glock;

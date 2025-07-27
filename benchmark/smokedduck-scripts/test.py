@@ -40,13 +40,14 @@ qfile = prefix+str(args.qid).zfill(2)+".sql"
 text_file = open(qfile, "r")
 query = text_file.read().strip()
 query = ' '.join(query.split())
+print(query)
 con.execute("PRAGMA enable_lineage")
 df = con.execute(query).fetchdf()
 con.execute("PRAGMA disable_lineage")
 print(df)
 
 q_list = con.execute("select * from duckdb_queries_list()").df()
-print(q_list)
+print(con.execute("select build_time, postprocess_time, plan from q_list").df())
 
 # TODO: q16 op21 -> gb probe (need to deal with distinct)
 

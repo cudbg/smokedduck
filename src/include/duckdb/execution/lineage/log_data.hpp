@@ -88,12 +88,11 @@ struct int_address_artifact {
 };
 
 struct address_sel_artifact {
-  address_sel_artifact(data_ptr_t* addresses, sel_t* sel, idx_t count, idx_t in_start)
-  : addresses(addresses), sel(sel), count(count), in_start(in_start) {}
+  address_sel_artifact(data_ptr_t* addresses, sel_t* sel, idx_t count)
+  : addresses(addresses), sel(sel), count(count) {}
 	data_ptr_t* addresses;
 	sel_t* sel;
 	idx_t count;
-  idx_t in_start;
 };
 
 struct combine_artifact {
@@ -179,8 +178,14 @@ public:
 	vector<perfect_full_scan_ht_artifact> perfect_full_scan_ht_log;
   vector<perfect_join_artifact> perfect_probe_ht_log;
 	vector<scan_artifact> row_group_log;
-	vector<no_address_artifact> scatter_log;
+	
+  vector<no_address_artifact> scatter_log;
+  
+  vector<unordered_map<data_ptr_t, bool>> scatter_log_set;
+  vector<unordered_map<data_ptr_t, vector<idx_t>>> scatter_log_index;
+
 	vector<int_address_artifact> int_scatter_log;
+
 	vector<address_sel_artifact> scatter_sel_log;
 	vector<combine_artifact> combine_log;
 	vector<address_artifact> finalize_states_log;

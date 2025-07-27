@@ -16,52 +16,91 @@ shared_ptr<OperatorLineage> GetLop(shared_ptr<OperatorLineage> lop, int opid) {
   return nullptr;
 }
 
-  /*
 // add BuildIndexes() 
 // zone map for ResultCollector
 // {oid} -> {lsn}
 void OperatorLineage::BuildIndexes() {
-  if (processed) return;
-  if (thread_vec.empty()) {
-    thread_vec.reserve(log.size());
-    for (const auto& pair : log) {
-      thread_vec.push_back(pair.first);
-    }
-  }
+	for (idx_t i = 0; i < children.size(); i++) {
+    children[i]->BuildIndexes();
+	}
 	switch (type) {
   case PhysicalOperatorType::ORDER_BY:
-	case PhysicalOperatorType::TABLE_SCAN:
 	case PhysicalOperatorType::FILTER: 
-	case PhysicalOperatorType::COLUMN_DATA_SCAN:
 	case PhysicalOperatorType::STREAMING_LIMIT:
 	case PhysicalOperatorType::LIMIT:
 	case PhysicalOperatorType::NESTED_LOOP_JOIN:
 	case PhysicalOperatorType::BLOCKWISE_NL_JOIN:
 	case PhysicalOperatorType::CROSS_PRODUCT:
 	case PhysicalOperatorType::PIECEWISE_MERGE_JOIN: {
-    // oid -> (lsn, thread_id, local_oid)
+    // oid -> (pk{lsn, thread_id, local_oid})
 		break;
 	}
 	case PhysicalOperatorType::HASH_GROUP_BY:
 	case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
-    // the following steps are across multiple functions;
-    // build light weight indexes over the output of GetData() to Sink()
     // oid -> (lsn, thread_id, local_oid) accee scatter directly
+    for (int i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      shared_ptr<Log>& tlog = log[tkey];
+      for (int k=tlog->combine_log.size()-1; k >= 0; --k) {
+        idx_t res_count = tlog->combine_log[k].count;
+        auto src = tlog->combine_log[k].src;
+        auto target = tlog->combine_log[k].target;
+        for (idx_t j=0; j < res_count; ++j) {
+          partition_addr_index[target[j]].emplace_back(i, src[j]); 
+        }
+      }
+      if (tlog->scatter_log.size() > 0) {
+        //tlog->scatter_log_set.resize(tlog->scatter_log.size());
+        tlog->scatter_log_index.resize(tlog->scatter_log.size());
+        for (int k=0; k < tlog->scatter_log.size(); ++k) {
+          idx_t count = tlog->scatter_log[k].count;
+          data_ptr_t* payload = tlog->scatter_log[k].addresses;
+          for (idx_t j=0; j < count; ++j) {
+            //tlog->scatter_log_set[k][payload[j]] = true;
+            tlog->scatter_log_index[k][payload[j]].emplace_back(j);
+          }
+        }
+      } else {
+       // tlog->scatter_log_set.resize(tlog->int_scatter_log.size());
+        tlog->scatter_log_index.resize(tlog->int_scatter_log.size());
+        for (int k=0; k < tlog->int_scatter_log.size(); ++k) {
+          idx_t count = tlog->int_scatter_log[k].count;
+          int* payload = tlog->int_scatter_log[k].addresses;
+          int tuple_size = tlog->tuple_size;
+          uintptr_t fixed = tlog->fixed;
+          for (idx_t j=0; j < count; ++j) {
+            data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
+            //tlog->scatter_log_set[k][key] = true;
+            tlog->scatter_log_index[k][key].emplace_back(j);
+          }
+        }
+      }
+    }     
+
     break;
   } case PhysicalOperatorType::HASH_JOIN: {
-    // getdata() -> ?
     // execute() -> zonemap ? it is pipelined
     // sink() -> build index
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
-      idx_t count_so_far = 0;
       if (log.count(tkey) == 0 || log[tkey]->scatter_sel_log.empty()) continue;
-      // std::cout << "Scatter Join: " << log[tkey]->scatter_sel_log.size() << std::endl;
+      std::cout << " scatter_sel: " << log[tkey]->scatter_sel_log.size() << std::endl;
       for (int k = 0; k < log[tkey]->scatter_sel_log.size(); k++) {
         idx_t res_count = log[tkey]->scatter_sel_log[k].count;
-        idx_t in_start = log[tkey]->scatter_sel_log[k].in_start;
         auto payload = log[tkey]->scatter_sel_log[k].addresses;
-        //index[payload[j]] -> {k, tkey};
+        auto sel = log[tkey]->scatter_sel_log[k].sel;
+        idx_t pk = k * thread_vec.size() + i;
+        if (sel) {
+          for (idx_t j=0; j < res_count; ++j) {
+            //std::cout << sel[j] << " " << (void*)payload[j] << " " << pk << " " << k << " " << i << std::endl;
+            scatter_sel_log_index[payload[j]] = {pk, sel[j]};
+          }
+        } else {
+          for (idx_t j=0; j < res_count; ++j) {
+          //  std::cout << j << " " << (void*)payload[j] << " " << pk << " " << k << " " << i << std::endl;
+            scatter_sel_log_index[payload[j]] = {pk, j};
+          }
+        }
       }
     }
     for (int i=0; i < thread_vec.size(); i++) {
@@ -74,35 +113,29 @@ void OperatorLineage::BuildIndexes() {
           idx_t build_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_build->owned_data.get()[e];
           idx_t tuples_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_tuples->owned_data.get()[e];
           data_ptr_t* ptr = (data_ptr_t*)log[tkey]->perfect_full_scan_ht_log[k].row_locations->GetData();
-          index[build_idx] -> {k, tkey}
+          perfect_full_scan_ht_index[build_idx] = ptr[tuples_idx];
         }
       }
     }
+    std::cout << "-> " << perfect_full_scan_ht_index.size() << " " << scatter_sel_log_index.size() << std::endl;
     break;
   }
 	default: {
 		// Lineage unimplemented! TODO all of these :)
 	}
 	}
-	processed = true;
-}*/
+}
 
 void OperatorLineage::PostProcess() {
   if (processed) return;
   if (thread_vec.empty()) {
     thread_vec.reserve(log.size());
+    idx_t tid=0;
     for (const auto& pair : log) {
       thread_vec.push_back(pair.first);
     }
   }
 	switch (type) {
-	case PhysicalOperatorType::TABLE_SCAN:
-	case PhysicalOperatorType::FILTER: 
-	case PhysicalOperatorType::COLUMN_DATA_SCAN:
-	case PhysicalOperatorType::STREAMING_LIMIT:
-	case PhysicalOperatorType::LIMIT: {
-    break;
-                                    }
 	case PhysicalOperatorType::HASH_GROUP_BY:
 	case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
     // gather
@@ -117,9 +150,8 @@ void OperatorLineage::PostProcess() {
         for (idx_t j=0; j < res_count; ++j) {
           if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
             log_index->codes[payload[j]] = j + count_so_far;
-            // TODO: add tkey associasted with this code
           } else {
-            //std::cout << "dublicate error gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+            std::cout << "dublicate error gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
           }
         }
         count_so_far += res_count;
@@ -130,13 +162,11 @@ void OperatorLineage::PostProcess() {
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
       if (log.count(tkey) == 0 || log[tkey]->combine_log.empty()) continue;
-      //std::cout << "combine states: " << log[tkey]->combine_log.size() << std::endl;
       for (int k=log[tkey]->combine_log.size()-1; k >= 0; --k) {
         idx_t res_count = log[tkey]->combine_log[k].count;
         auto src = log[tkey]->combine_log[k].src;
         auto target = log[tkey]->combine_log[k].target;
         for (idx_t j=0; j < res_count; ++j) {
-          //std::cout << res_count << " combine: " << j << " " << log_index->codes[src[j]] << " " << log_index->codes[target[j]]  << " " << (void*)src[j] << " " << (void*)target[j] << std::endl;
           log_index->codes[src[j]] = log_index->codes[target[j]];
         }
       }
@@ -144,7 +174,6 @@ void OperatorLineage::PostProcess() {
       // log[tkey]->combine_log.clear();
     }      
 
-    // std::cout << " done " << std::endl;
     break;
   }
 	case PhysicalOperatorType::ORDER_BY: {
@@ -170,61 +199,44 @@ void OperatorLineage::PostProcess() {
       void* tkey = thread_vec[i];
       idx_t count_so_far = 0;
       if (log.count(tkey) == 0 || log[tkey]->scatter_sel_log.empty()) continue;
-      // std::cout << "Scatter Join: " << log[tkey]->scatter_sel_log.size() << std::endl;
+      idx_t offset = 0;
       for (int k = 0; k < log[tkey]->scatter_sel_log.size(); k++) {
         idx_t res_count = log[tkey]->scatter_sel_log[k].count;
-        idx_t in_start = log[tkey]->scatter_sel_log[k].in_start;
         auto payload = log[tkey]->scatter_sel_log[k].addresses;
-        //std::cout << k << " " << res_count << std::endl;
         if (log[tkey]->scatter_sel_log[k].sel) {
           auto sel = log[tkey]->scatter_sel_log[k].sel;
           for (idx_t j=0; j < res_count; ++j) {
             if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
-              log_index->codes[payload[j]] = sel[j] + in_start;
-              //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+              log_index->codes[payload[j]] = sel[j] + offset;
             }
           }
         } else {
           for (idx_t j=0; j < res_count; ++j) {
             if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
-              log_index->codes[payload[j]] = j + in_start;
-              //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+              log_index->codes[payload[j]] = j + offset;
             }
           }
         }
+        offset += res_count;
       }
     }
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
       if (log.count(tkey) == 0 || log[tkey]->perfect_full_scan_ht_log.empty()) continue;
-     // std::cout << "Perfect Join: " << log[tkey]->perfect_full_scan_ht_log.size() << std::endl;
       for (int k = 0; k < log[tkey]->perfect_full_scan_ht_log.size(); k++) {
         idx_t key_count = log[tkey]->perfect_full_scan_ht_log[k].key_count;
         idx_t ht_count = log[tkey]->perfect_full_scan_ht_log[k].ht_count;
-       //  std::cout << k << " " << key_count << " " << ht_count << std::endl;
         for (int e=0; e < key_count; e++) {
           idx_t build_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_build->owned_data.get()[e];
           idx_t tuples_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_tuples->owned_data.get()[e];
           data_ptr_t* ptr = (data_ptr_t*)log[tkey]->perfect_full_scan_ht_log[k].row_locations->GetData();
-         // std::cout << "-> " << build_idx << " " << tuples_idx << " " << key_count << " " << ht_count  << std::endl;
-         // TODO: check if this is correct. follow old implementation
-         log_index->perfect_codes[build_idx] = log_index->codes[ptr[tuples_idx]];
-         // std::cout << "-> " << (void*)ptr[ tuples_idx ]  << std::endl;
+           log_index->perfect_codes[build_idx] = log_index->codes[ptr[tuples_idx]];
         }
       }
     }
-    // std::cout << operator_id << " log_index: " << log_index->vals.size() << std::endl;
     break;
   }
-	case PhysicalOperatorType::NESTED_LOOP_JOIN:
-	case PhysicalOperatorType::BLOCKWISE_NL_JOIN:
-	case PhysicalOperatorType::CROSS_PRODUCT:
-	case PhysicalOperatorType::PIECEWISE_MERGE_JOIN: {
-		break;
-	}
-	default: {
-		// Lineage unimplemented! TODO all of these :)
-	}
+	default: {}
 	}
 	processed = true;
 }
@@ -609,7 +621,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
         int64_t* lhs_col_data = (int64_t*)chunk.data[lhs_col].GetData();
         for (idx_t j=0; j < count; ++j) {
           if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
-             //std::cout << "probe: " << j<< " " << lhs[j] << " " << count <<  " " << (void*)payload[j] << std::endl;
+             std::cout << "probe: " << j<< " " << lhs[j] << " " << count <<  " " << (void*)payload[j] << std::endl;
           }
           rhs_col_data[j] = log_index->codes[ payload[j] ];
           lhs_col_data[j] = lhs[j] + in_start;
@@ -617,7 +629,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
       } else {
         for (idx_t j=0; j < count; ++j) {
           if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
-            // std::cout << "probe: " << " null " << count <<  " " << (void*)payload[j] << std::endl;
+            std::cout << "probe: " << " null " << count <<  " " << (void*)payload[j] << std::endl;
           }
           rhs_col_data[j] = log_index->codes[ payload[j] ];
         }

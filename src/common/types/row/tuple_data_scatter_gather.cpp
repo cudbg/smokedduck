@@ -560,15 +560,13 @@ void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const DataCh
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log && active_log->capture) {
 			data_ptr_t* addresses_copy = (data_ptr_t*)malloc(sizeof(data_ptr_t)*append_count);
-		  memcpy(addresses_copy, row_locations,  append_count * sizeof(sel_t));
-      // pactive_lop->children[1]->out_start
-      // TODO: remove out_start
+		  memcpy(addresses_copy, row_locations,  append_count * sizeof(data_ptr_t));
       if (append_sel.data()) {
         sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t) * append_count);
 		    memcpy(sel_copy, append_sel.data(),  append_count * sizeof(sel_t));
-			  active_log->scatter_sel_log.emplace_back(addresses_copy, sel_copy, append_count, 0);
+			  active_log->scatter_sel_log.emplace_back(addresses_copy, sel_copy, append_count);
       } else {
-			  active_log->scatter_sel_log.emplace_back(addresses_copy, nullptr, append_count, 0);
+			  active_log->scatter_sel_log.emplace_back(addresses_copy, nullptr, append_count);
       }
 		}
 #endif
