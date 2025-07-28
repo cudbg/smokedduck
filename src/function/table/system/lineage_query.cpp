@@ -64,9 +64,12 @@ static unique_ptr<FunctionData> LineageQueryBind(ClientContext &context, TableFu
 
   // read and initalize idx_t qid; idx_t opid;
   auto lop = lineage_manager->queryid_to_plan[result->qid];
-  result->lop = GetLop(lop, result->opid);
+  if (result->opid < 100)
+    result->lop = GetLop(lop, result->opid);
+  else
+    result->lop = GetNextChild(lop);
   if (result->lop == nullptr) return std::move(result);
-  std::cout << "lineage query "<< result->opid << " " << result->qid << std::endl;
+  std::cout << "LQ: "<< result->opid << " " << result->qid << std::endl;
 	
 
   clock_t start = clock();
@@ -76,7 +79,7 @@ static unique_ptr<FunctionData> LineageQueryBind(ClientContext &context, TableFu
 
   unordered_map<idx_t, vector<idx_t>> oids_per_lsn;
   if (!log_context.empty())  {
-    std::cout << " log context: " << log_context[0] << " " << log_context[1] << std::endl;
+    // std::cout << " log context: " << log_context[0] << " " << log_context[1] << std::endl;
     oids_per_lsn[log_context[0]] = {log_context[1]};
   }
   start = clock();

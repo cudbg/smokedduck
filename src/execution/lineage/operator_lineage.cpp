@@ -38,9 +38,20 @@ void OperatorLineage::BuildIndexes() {
 	case PhysicalOperatorType::HASH_GROUP_BY:
 	case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
     // oid -> (lsn, thread_id, local_oid) accee scatter directly
+    unordered_map<void*, idx_t> thread_vec_map_local;
+    auto child = GetNextChild(children[0]);
+    idx_t child_max_threads = child->thread_vec.size();
+    for (idx_t ctid=0; ctid < child->thread_vec.size(); ctid++) {
+      thread_vec_map_local[ child->thread_vec[ctid] ] = ctid;
+    }
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
       shared_ptr<Log>& tlog = log[tkey];
+      auto tid_it = thread_vec_map_local.find(tkey);
+      idx_t child_tid = 0;
+      if (tid_it == thread_vec_map_local.end()) {
+        child_tid = tid_it->second;
+      }
       for (int k=tlog->combine_log.size()-1; k >= 0; --k) {
         idx_t res_count = tlog->combine_log[k].count;
         auto src = tlog->combine_log[k].src;
@@ -50,28 +61,30 @@ void OperatorLineage::BuildIndexes() {
         }
       }
       if (tlog->scatter_log.size() > 0) {
-        //tlog->scatter_log_set.resize(tlog->scatter_log.size());
         tlog->scatter_log_index.resize(tlog->scatter_log.size());
         for (int k=0; k < tlog->scatter_log.size(); ++k) {
           idx_t count = tlog->scatter_log[k].count;
           data_ptr_t* payload = tlog->scatter_log[k].addresses;
+          idx_t in_pk = k *  child_max_threads + child_tid;
           for (idx_t j=0; j < count; ++j) {
-            //tlog->scatter_log_set[k][payload[j]] = true;
-            tlog->scatter_log_index[k][payload[j]].emplace_back(j);
+          //  tlog->scatter_log_index[k][payload[j]].emplace_back(j);
+          //  tlog->scatter_log_inverse[payload[j]].insert(k);
+            scatter_log_index_full[payload[j]][in_pk].emplace_back(j);
           }
         }
       } else {
-       // tlog->scatter_log_set.resize(tlog->int_scatter_log.size());
         tlog->scatter_log_index.resize(tlog->int_scatter_log.size());
         for (int k=0; k < tlog->int_scatter_log.size(); ++k) {
           idx_t count = tlog->int_scatter_log[k].count;
           int* payload = tlog->int_scatter_log[k].addresses;
           int tuple_size = tlog->tuple_size;
+          idx_t in_pk = k *  child_max_threads + child_tid;
           uintptr_t fixed = tlog->fixed;
           for (idx_t j=0; j < count; ++j) {
             data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
-            //tlog->scatter_log_set[k][key] = true;
-            tlog->scatter_log_index[k][key].emplace_back(j);
+           // tlog->scatter_log_index[k][key].emplace_back(j);
+          //   tlog->scatter_log_inverse[key].insert(k);
+            scatter_log_index_full[key][in_pk].emplace_back(j);
           }
         }
       }
@@ -136,7 +149,7 @@ void OperatorLineage::PostProcess() {
     }
   }
 	switch (type) {
-	case PhysicalOperatorType::HASH_GROUP_BY:
+  case PhysicalOperatorType::HASH_GROUP_BY:
 	case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
     // gather
     for (int i=0; i < thread_vec.size(); i++) {

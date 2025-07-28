@@ -24,6 +24,7 @@ class OperatorLineage;
 
 
 shared_ptr<OperatorLineage> GetLop(shared_ptr<OperatorLineage> lop, int opid);
+shared_ptr<OperatorLineage> GetNextChild(shared_ptr<OperatorLineage>& lop);
 
 //! OperatorLineage
 /*!
@@ -72,6 +73,7 @@ public:
   unordered_map<data_ptr_t, std::pair<idx_t, idx_t>> scatter_sel_log_index;
   unordered_map<sel_t, data_ptr_t> perfect_full_scan_ht_index;
   unordered_map<data_ptr_t, vector<std::pair<idx_t, data_ptr_t>>> partition_addr_index;
+  unordered_map<data_ptr_t, unordered_map<idx_t, vector<idx_t>>> scatter_log_index_full;
 
   idx_t out_start;
   idx_t out_end;

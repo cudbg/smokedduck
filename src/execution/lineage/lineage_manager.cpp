@@ -40,29 +40,44 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext 
 	global_logger[(void*)op] = make_shared_ptr<OperatorLineage>(op, operators_ids[(void*)op], op->type, op->GetName());
 	op->lop = global_logger[(void*)op];
 	InitLog(op->lop, (void*)&context);
-
-	if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
+  
+  if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
 		PhysicalOperator* plan = &dynamic_cast<PhysicalResultCollector*>(op)->plan;
 		shared_ptr<OperatorLineage> lop = CreateOperatorLineage(context, plan);
 		global_logger[(void*)op]->children.push_back(lop);
 	}
 
   if (op->type == PhysicalOperatorType::RIGHT_DELIM_JOIN || op->type == PhysicalOperatorType::LEFT_DELIM_JOIN) {
+    idx_t cid = 0;
+    if (op->type == PhysicalOperatorType::RIGHT_DELIM_JOIN) {
+      cid = 1;
+    }
+    std::cout <<  op->ToString() << std::endl;
 		auto distinct = (PhysicalOperator*)dynamic_cast<PhysicalDelimJoin *>(op)->distinct.get();
-		shared_ptr<OperatorLineage> lop = CreateOperatorLineage(context, distinct);
-		global_logger[(void*)op]->children.push_back(lop);
-		for (idx_t i = 0; i < dynamic_cast<PhysicalDelimJoin *>(op)->delim_scans.size(); ++i) {
-			// dynamic_cast<PhysicalDelimJoin *>(op)->delim_scans[i]->lineage_op = distinct->lineage_op;
+		shared_ptr<OperatorLineage> distinct_lop = CreateOperatorLineage(context, distinct);
+		shared_ptr<OperatorLineage> join_lop = CreateOperatorLineage(context, dynamic_cast<PhysicalDelimJoin *>(op)->join.get());
+    //std::cout << " ===== DISTINCT ======= " << distinct_lop->children.size() << std::endl;
+    //std::cout <<  distinct->ToString() << std::endl;
+    //std::cout << " ===== JOIN  ======= " << join_lop->children.size() <<  std::endl;
+    //std::cout << dynamic_cast<PhysicalDelimJoin *>(op)->join.get()->ToString() << std::endl;
+    
+    join_lop->children[cid] = CreateOperatorLineage(context, op->children.back().get());
+    distinct_lop->children.push_back(join_lop->children[cid]);
+    op->lop->children.push_back(join_lop);
+		
+    for (idx_t i = 0; i < dynamic_cast<PhysicalDelimJoin *>(op)->delim_scans.size(); ++i) {
+		  auto dscan = dynamic_cast<PhysicalDelimJoin *>(op)->delim_scans[i];
+		  global_logger[(void*)&dscan.get()]->children.push_back(distinct_lop);
 		}
-		lop = CreateOperatorLineage(context, dynamic_cast<PhysicalDelimJoin *>(op)->join.get());
-   // std::cout << dynamic_cast<PhysicalDelimJoin *>(op)->join.get()->ToString() << std::endl;
-		global_logger[(void*)op]->children.push_back(lop);
-	}
+	} else {
+    for (idx_t i = 0; i < op->children.size(); i++) {
+      shared_ptr<OperatorLineage> lop = CreateOperatorLineage(context, op->children[i].get());
+      global_logger[(void*)op]->children.push_back(lop);
+    }
+    
+  }
 
-	for (idx_t i = 0; i < op->children.size(); i++) {
-		shared_ptr<OperatorLineage> lop = CreateOperatorLineage(context, op->children[i].get());
-		global_logger[(void*)op]->children.push_back(lop);
-	}
+
 
 	return global_logger[(void*)op];
 }
@@ -106,6 +121,7 @@ void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator 
 
 void LineageManager::PostProcess(shared_ptr<OperatorLineage> lop) {
   if (lop == nullptr) return;
+  if (lop->type == PhysicalOperatorType::DELIM_SCAN) return;
   lop->PostProcess();
 	for (idx_t i = 0; i < lop->children.size(); i++) {
 	  PostProcess(lop->children[i]);
@@ -114,6 +130,8 @@ void LineageManager::PostProcess(shared_ptr<OperatorLineage> lop) {
 
 std::vector<int64_t> LineageManager::GetStats(shared_ptr<OperatorLineage> lop) {
   if (lop == nullptr) return {0, 0, 0};
+  if (lop->type == PhysicalOperatorType::DELIM_SCAN) return {0, 0, 0};
+
   std::vector<int64_t> stats = lop->GatherStats();
   int64_t lineage_size_mb = stats[0];
   int64_t count = stats[1];
