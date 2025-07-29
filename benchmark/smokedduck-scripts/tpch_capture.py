@@ -112,7 +112,7 @@ for th_id in threads_list:
         print("**** output size: ", output_size, ", lineage_size: " , lineage_size)
         plan = None
         if args.lineage and args.stats:
-            lineage_size, lineage_count, nchunks, postprocess_time, plan = getStats(con, query)
+            lineage_size, lineage_count, nchunks, postprocess_time, build_time, plan = getStats(con, query)
             print(plan)
             size_avg += lineage_size
             postprocess_time *= 1000

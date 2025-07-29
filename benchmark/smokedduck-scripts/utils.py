@@ -100,9 +100,10 @@ def getStats(con, q):
     lineage_count = query_info.loc[n, 'tuples_count']
     nchunks = query_info.loc[n, 'nchunks']
     postprocess_time = query_info.loc[n, 'postprocess_time']
+    build_time = query_info.loc[n, 'build_time']
     plan = query_info.loc[n, 'plan']
 
-    return lineage_size, lineage_count, nchunks, postprocess_time, plan
+    return lineage_size, lineage_count, nchunks, postprocess_time, build_time, plan
 
 def execute(Q, con, args):
     Q = " ".join(Q.split())

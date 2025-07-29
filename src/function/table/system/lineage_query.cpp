@@ -31,6 +31,7 @@ struct LineageQueryBindData : public TableFunctionData {
   int opid;
   shared_ptr<OperatorLineage> lop;
   unordered_map<idx_t, vector<vector<idx_t>>> out_per_source;
+  unordered_map<idx_t, vector<vector<idx_t>>>::iterator source_iter;
   idx_t oid;
 
   void Initialize() {
@@ -40,14 +41,14 @@ struct LineageQueryBindData : public TableFunctionData {
 };
 
 struct LineageQueryGlobalState : public GlobalTableFunctionState {
-	LineageQueryGlobalState() : offset(0) {
-	}
+	LineageQueryGlobalState() : offset(0) {	}
 	idx_t offset;
 };
 
 struct LineageQueryLocalState : public LocalTableFunctionState {
-  idx_t cur;
-  vector<vector<idx_t>> buffer;
+	LineageQueryLocalState() : outer_cur(0), inner_offset(0) {	}
+  idx_t outer_cur;
+  idx_t inner_offset;
 };
 
 
@@ -58,6 +59,7 @@ static unique_ptr<FunctionData> LineageQueryBind(ClientContext &context, TableFu
     throw BinderException("lineage_query(qid:int, opid:int, oid:[uint])");
   }
 
+  bool debug = false;
   result->qid = input.inputs[0].GetValue<int>();
   result->opid = input.inputs[1].GetValue<int>();
   result->oid = input.inputs[2].GetValue<int>();
@@ -69,7 +71,7 @@ static unique_ptr<FunctionData> LineageQueryBind(ClientContext &context, TableFu
   else
     result->lop = GetNextChild(lop);
   if (result->lop == nullptr) return std::move(result);
-  std::cout << "LQ: "<< result->opid << " " << result->qid << std::endl;
+  if (debug) std::cout << "LQ: "<< result->opid << " " << result->qid << std::endl;
 	
 
   clock_t start = clock();
@@ -90,22 +92,16 @@ static unique_ptr<FunctionData> LineageQueryBind(ClientContext &context, TableFu
   // " resolve " << resolve_time << " lq: " << lq_time << std::endl;
   if (result->out_per_source.empty()) return std::move(result);
 
-  return_types.emplace_back(LogicalType::ROW_TYPE);
-  names.emplace_back("out");
-  return_types.emplace_back(LogicalType::ROW_TYPE);
-  names.emplace_back("in");
-  
-  // std::cout << "|source| = " << result->out_per_source.size() << std::endl;
- /* for (auto& source : result->out_per_source) {
-    std::cout << "source: " << source.first << std::endl;
-    for (auto& iids : source.second) {
-      for (auto& id : iids) {
-        std::cout << id << " ";
-      }
-    }
-    std::cout << std::endl;
-  }*/
+  if (debug) std::cout << "|source| = " << result->out_per_source.size() << std::endl;
 
+  return_types.emplace_back(LogicalType::ROW_TYPE);
+  names.emplace_back("table");
+  return_types.emplace_back(LogicalType::ROW_TYPE);
+  names.emplace_back("oid");
+  return_types.emplace_back(LogicalType::ROW_TYPE);
+  names.emplace_back("iid");
+  
+  result->source_iter = result->out_per_source.begin();
 
 	return std::move(result);
 }
@@ -125,18 +121,37 @@ void LineageQueryFunction(ClientContext &context, TableFunctionInput &data_p, Da
   auto &ldata = data_p.local_state->Cast<LineageQueryLocalState>();
   auto &gdata = data_p.global_state->Cast<LineageQueryGlobalState>();
   auto &bdata = data_p.bind_data->CastNoConst<LineageQueryBindData>();
-  if (!lineage_manager || !bdata.lop) return; 
-  idx_t oid = bdata.oid;
-  Vector oid_vec(Value::BIGINT(oid));
+  if (!lineage_manager || !bdata.lop || bdata.source_iter == bdata.out_per_source.end()) return; 
+  
+  Vector oid_vec(Value::BIGINT(bdata.oid));
   output.data[0].Reference(oid_vec);
-  auto& out = bdata.out_per_source.begin()->second;
-  if (ldata.cur >= out.size()) return;
-  auto& cur_buffer = out[ldata.cur++];
-  idx_t count = cur_buffer.size() > STANDARD_VECTOR_SIZE ? STANDARD_VECTOR_SIZE : cur_buffer.size();
-  output.SetCardinality(count);
-  data_ptr_t ptr = (data_ptr_t)(cur_buffer.data());
+
+  // second: idx_t, vector<vector<idx_t>>
+  auto& inner = bdata.source_iter->second[ ldata.outer_cur ];
+  // std::cout << bdata.source_iter->first << " " << ldata.outer_cur << " " << ldata.inner_offset << " " << inner.size() << " " <<  bdata.source_iter->second.size() << std::endl;
+  if (ldata.inner_offset >= inner.size()) {
+    ldata.outer_cur++;
+    ldata.inner_offset = 0;
+    if (ldata.outer_cur >= bdata.source_iter->second.size()) {
+      bdata.source_iter++;
+      ldata.outer_cur = 0;
+    }
+    if (bdata.source_iter == bdata.out_per_source.end()) return; 
+    inner = bdata.source_iter->second[ ldata.outer_cur ];
+  }
+
+  Vector source_vec(Value::BIGINT(bdata.source_iter->first));
+  output.data[1].Reference(source_vec);
+
+  idx_t remaining = inner.size() - ldata.inner_offset;
+  idx_t count = remaining  > STANDARD_VECTOR_SIZE ? STANDARD_VECTOR_SIZE : remaining;
+  data_ptr_t ptr = (data_ptr_t)(inner.data() + ldata.inner_offset);
   Vector in_index(LogicalType::BIGINT, ptr);
-  output.data[1].Reference(in_index); // in_index
+  output.data[2].Reference(in_index); // in_index
+  
+
+  output.SetCardinality(count);
+  ldata.inner_offset += count;
 }
 
 void LineageQueryFun::RegisterFunction(BuiltinFunctions &set) {

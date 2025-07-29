@@ -97,7 +97,7 @@ void OperatorLineage::BuildIndexes() {
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
       if (log.count(tkey) == 0 || log[tkey]->scatter_sel_log.empty()) continue;
-      std::cout << " scatter_sel: " << log[tkey]->scatter_sel_log.size() << std::endl;
+     //  std::cout << " scatter_sel: " << log[tkey]->scatter_sel_log.size() << std::endl;
       for (int k = 0; k < log[tkey]->scatter_sel_log.size(); k++) {
         idx_t res_count = log[tkey]->scatter_sel_log[k].count;
         auto payload = log[tkey]->scatter_sel_log[k].addresses;
@@ -130,7 +130,7 @@ void OperatorLineage::BuildIndexes() {
         }
       }
     }
-    std::cout << "-> " << perfect_full_scan_ht_index.size() << " " << scatter_sel_log_index.size() << std::endl;
+   // std::cout << "-> " << perfect_full_scan_ht_index.size() << " " << scatter_sel_log_index.size() << std::endl;
     break;
   }
 	default: {

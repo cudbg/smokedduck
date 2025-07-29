@@ -21,15 +21,54 @@ pair<idx_t, idx_t> decode_pk(idx_t pk, idx_t max_threads) {
   return { pk % (max_threads) , pk / (max_threads) };
 }
 
+unordered_map<void*, idx_t> get_threads_map(std::vector<void*>& thread_vec) {
+  unordered_map<void*, idx_t> map_local;
+  for (idx_t ctid=0; ctid < thread_vec.size(); ctid++) {
+    map_local[ thread_vec[ctid] ] = ctid;
+  }
+  return std::move(map_local);
+}
 
 // fill out_log_context
 void OperatorLineage::get_right_match(vector<data_ptr_t>& in_key,
     unordered_map<idx_t, vector<idx_t>>& oids_per_lsn) {
   auto rchild = GetNextChild(children[1]);
   idx_t rchild_max_threads = rchild->thread_vec.size();
+  unordered_map<void*, idx_t> thread_vec_map_local = get_threads_map(rchild->thread_vec);
   idx_t max_threads = thread_vec.size();
-  unordered_map<void*, bool> seen;
   // TODO: build incremental index
+  if (scatter_sel_log_index.empty() /* && incremental */) {
+    for (int i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      auto& tlog = log[tkey];
+      if (tlog->scatter_sel_log.empty()) continue;
+      auto tid_it = thread_vec_map_local.find(tkey);
+      if (tid_it == thread_vec_map_local.end()) continue;
+      idx_t rchild_tid = tid_it->second;
+      for (int k = 0; k < tlog->scatter_sel_log.size(); k++) {
+        idx_t res_count = tlog->scatter_sel_log[k].count;
+        auto payload = tlog->scatter_sel_log[k].addresses;
+        auto sel = tlog->scatter_sel_log[k].sel;
+        idx_t in_pk = encode(k, rchild_tid, rchild_max_threads);
+        idx_t pk = k * thread_vec.size() + i;
+        //std::cout << "Lookup: " << k << " " << in_pk << " in_keys " << in_key.size() << std::endl;
+        if (sel) {
+          for (idx_t o=0; o < in_key.size(); ++o)
+            for (idx_t j=0; j < res_count; ++j)
+             // if (in_key[o] == payload[j]) oids_per_lsn[in_pk].emplace_back(sel[j]);
+              scatter_sel_log_index[payload[j]] = {pk, sel[j]}; // incremental
+        } else {
+          for (idx_t o=0; o < in_key.size(); ++o)
+            for (idx_t j=0; j < res_count; ++j)
+              // if (in_key[o] == payload[j])   oids_per_lsn[in_pk].emplace_back(j);
+              scatter_sel_log_index[payload[j]] = {pk, j}; // incemental
+        }
+          
+      }
+    }
+  }
+  
+  unordered_map<void*, bool> seen;
   if (!scatter_sel_log_index.empty()) {
       for (idx_t o=0; o < in_key.size(); ++o) {
         if (seen.find( in_key[o] ) == seen.end()) {
@@ -45,80 +84,52 @@ void OperatorLineage::get_right_match(vector<data_ptr_t>& in_key,
         void* tkey = thread_vec[thread_idx];
         idx_t lsn = tid_lsn.second;
         idx_t iid = pk_iid.second;
-        //std::cout << o << " " << max_threads << " " << (void*)in_key[o] << " " << pk_iid.first << " " << pk_iid.second << " " << tid_lsn.first << " " << tid_lsn.second <<std::endl;
-        auto it = std::find(rchild->thread_vec.begin(), rchild->thread_vec.end(), tkey); // TODO: replace with index
-        if (it == rchild->thread_vec.end()) continue;
-        idx_t rchild_tid = std::distance(rchild->thread_vec.begin(), it);
+        // std::cout << o << " " << max_threads << " " << (void*)in_key[o] << " " << pk_iid.first << " " << pk_iid.second << " " << tid_lsn.first << " " << tid_lsn.second <<std::endl;
+        auto tid_it = thread_vec_map_local.find(tkey);
+        if (tid_it == thread_vec_map_local.end()) continue;
+        idx_t rchild_tid = tid_it->second;
         idx_t in_pk = encode(lsn, rchild_tid, rchild_max_threads);
         oids_per_lsn[in_pk].emplace_back(iid);
       }
       return;
   }
-  for (int i=0; i < thread_vec.size(); i++) {
-    void* tkey = thread_vec[i];
-    auto& tlog = log[tkey];
-    if (tlog->scatter_sel_log.empty()) continue;
-    auto it = std::find(rchild->thread_vec.begin(), rchild->thread_vec.end(), tkey); // TODO: replace with index
-    if (it == rchild->thread_vec.end()) continue;
-    idx_t rchild_tid = std::distance(rchild->thread_vec.begin(), it);
-    for (int k = 0; k < tlog->scatter_sel_log.size(); k++) {
-      idx_t res_count = tlog->scatter_sel_log[k].count;
-      auto payload = tlog->scatter_sel_log[k].addresses;
-      auto sel = tlog->scatter_sel_log[k].sel;
-      idx_t in_pk = encode(k, rchild_tid, rchild_max_threads);
-      if (sel) {
-        for (idx_t o=0; o < in_key.size(); ++o)
-          for (idx_t j=0; j < res_count; ++j)
-            if (in_key[o] == payload[j]) oids_per_lsn[in_pk].emplace_back(sel[j]);
-      } else {
-        for (idx_t o=0; o < in_key.size(); ++o)
-          for (idx_t j=0; j < res_count; ++j)
-            if (in_key[o] == payload[j])   oids_per_lsn[in_pk].emplace_back(j);
-      }
-        
-    }
-  }
 }
 
 void OperatorLineage::get_perfect_right_match(vector<sel_t>& in_key,
     vector<data_ptr_t>& scatter_keys) {
-  //auto res = perfect_full_scan_ht_index.find(in_key[o]);
-  if (!perfect_full_scan_ht_index.empty()) { // res!=end()
-    for (idx_t o=0; o < in_key.size(); ++o) {
-      auto res = perfect_full_scan_ht_index.find(in_key[o]);
-      if (res != perfect_full_scan_ht_index.end()) continue;
-      scatter_keys[o] = res->second;
-    }
-    return;
-  }
-  for (int i=0; i < thread_vec.size(); i++) {
-    void* tkey = thread_vec[i];
-    auto& tlog = log[tkey];
-    if (tlog->perfect_full_scan_ht_log.empty()) continue;
-    // TODO: build incremental index
-    for (int k = 0; k < tlog->perfect_full_scan_ht_log.size(); k++) {
-      idx_t key_count = tlog->perfect_full_scan_ht_log[k].key_count;
-      idx_t ht_count = tlog->perfect_full_scan_ht_log[k].ht_count;
-      // if (debug) std::cout << "k(" << k << ") , key_count(" << key_count << "), ht_count( " << ht_count << ")" << std::endl;
-      for (idx_t o=0; o < in_key.size(); ++o) {
-        // check if in_keys[o] is in perfect_full_scan_ht_index, if not then find it and add it
-        for (int e=0; e < key_count; e++) {
-          sel_t build_idx = tlog->perfect_full_scan_ht_log[k].sel_build->owned_data.get()[e];
-          sel_t tuples_idx = tlog->perfect_full_scan_ht_log[k].sel_tuples->owned_data.get()[e];
-          data_ptr_t* ptr = (data_ptr_t*)tlog->perfect_full_scan_ht_log[k].row_locations->GetData();
-          if (in_key[o] == build_idx) {
-           // std::cout << "-> " << build_idx << " " << tuples_idx << " " << key_count << " " << ht_count  << std::endl;
-            scatter_keys[o] = ptr[tuples_idx];
-            //perfect_full_scan_ht_index[build_idx] = ptr[tuples_idx];
+  if (perfect_full_scan_ht_index.empty() /* && incremental */) {
+    for (int i=0; i < thread_vec.size(); i++) { 
+      void* tkey = thread_vec[i];
+      auto& tlog = log[tkey];
+      if (tlog->perfect_full_scan_ht_log.empty()) continue;
+      // TODO: build incremental index
+      for (int k = 0; k < tlog->perfect_full_scan_ht_log.size(); k++) {
+        idx_t key_count = tlog->perfect_full_scan_ht_log[k].key_count;
+        idx_t ht_count = tlog->perfect_full_scan_ht_log[k].ht_count;
+        // if (debug) std::cout << "k(" << k << ") , key_count(" << key_count << "), ht_count( " << ht_count << ")" << std::endl;
+        for (idx_t o=0; o < in_key.size(); ++o) {
+          // check if in_keys[o] is in perfect_full_scan_ht_index, if not then find it and add it
+          for (int e=0; e < key_count; e++) {
+            sel_t build_idx = tlog->perfect_full_scan_ht_log[k].sel_build->owned_data.get()[e];
+            sel_t tuples_idx = tlog->perfect_full_scan_ht_log[k].sel_tuples->owned_data.get()[e];
+            data_ptr_t* ptr = (data_ptr_t*)tlog->perfect_full_scan_ht_log[k].row_locations->GetData();
+            perfect_full_scan_ht_index[build_idx] = ptr[tuples_idx];
           }
         }
       }
     }
   }
+  
+  for (idx_t o=0; o < in_key.size(); ++o) {
+    auto res = perfect_full_scan_ht_index.find(in_key[o]);
+    if (res == perfect_full_scan_ht_index.end()) continue;
+    scatter_keys[o] = res->second;
+  }
 }
 
 // 1:1 mapping update in place
 idx_t physical_filter_in_place_update(Log* tlog, idx_t lsn, vector<idx_t>& oids) {
+  //std::cout << lsn << " " << tlog->execute_internal.size() << std::endl;
   D_ASSERT(lsn < tlog->execute_internal.size());
   int blsn = tlog->execute_internal[lsn].first-1;
   int in_lsn = tlog->execute_internal[lsn].second-1;
@@ -140,7 +151,26 @@ idx_t physical_filter_in_place_update(Log* tlog, idx_t lsn, vector<idx_t>& oids)
 }
 
 void fill_partition_addr(vector<pair<idx_t, data_ptr_t>>& partition_addr, std::vector<void*>& thread_vec,
-  unordered_map<void*, shared_ptr<Log>>& log, data_ptr_t addr) {
+  unordered_map<void*, shared_ptr<Log>>& log, data_ptr_t addr, bool use_combine) {
+  
+  if (partition_addr.size() == 0 && use_combine) {
+    for (int i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      shared_ptr<Log>& tlog = log[tkey];
+      for (int k=tlog->combine_log.size()-1; k >= 0; --k) {
+        idx_t res_count = tlog->combine_log[k].count;
+        auto src = tlog->combine_log[k].src;
+        auto target = tlog->combine_log[k].target;
+        for (idx_t j=0; j < res_count; ++j) {
+          if (target[j] == addr) {
+            partition_addr.emplace_back(i, src[j]); 
+            break;
+          }
+        }
+      }
+    }
+  }
+
   if (partition_addr.size() == 0) {
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
@@ -150,17 +180,9 @@ void fill_partition_addr(vector<pair<idx_t, data_ptr_t>>& partition_addr, std::v
   }
 }
 
-unordered_map<void*, idx_t> get_threads_map(std::vector<void*>& thread_vec) {
-  unordered_map<void*, idx_t> map_local;
-  for (idx_t ctid=0; ctid < thread_vec.size(); ctid++) {
-    map_local[ thread_vec[ctid] ] = ctid;
-  }
-  return std::move(map_local);
-}
-
 void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
                                 unordered_map<idx_t, vector<vector<idx_t>>>& sources, bool all) {
-    bool debug = true;
+    bool debug = false;
     idx_t max_threads = thread_vec.size();
     if (debug) std::cout << "LQ() -> " << operator_id << " " << name << " |log_context|:" << log_context.size() <<  " |sources|: " << sources.size() << 
       ", |thread_vec|: " << max_threads << std::endl;
@@ -356,7 +378,8 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
                 }
                 continue;
             } else if (sink_it == partition_addr_index.end()) {
-              fill_partition_addr(partition_addr_index[addr], thread_vec, log, addr);
+              bool use_combine = scatter_log_index_full.empty();
+              fill_partition_addr(partition_addr_index[addr], thread_vec, log, addr, use_combine);
               sink_it = partition_addr_index.find(addr);
             }
 
@@ -371,9 +394,8 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
                 if (debug) std::cout << "tid: " << thread_id << " Scatter:  "  << (void*)p.second
                     << " |ttlog->scatter_log|: " << ttlog->scatter_log.size()  << " |ttlog->int_scatter_log|: " << ttlog->int_scatter_log.size()
                     << " |partition_addr| : " << sink_it->second.size() << std::endl;
-                if (!scatter_log_index_full.empty()) {
-                    auto it_index = scatter_log_index_full.find(p.second);
-                    if (it_index == scatter_log_index_full.end()) continue;
+                auto it_index = scatter_log_index_full.find(p.second);
+                if (it_index != scatter_log_index_full.end()) {
                     for (auto& elem : it_index->second) {
                       if (debug) std::cout << "AGGS: in_pk: "<< elem.first << " " << elem.second.size() << std::endl;
                       oids_per_lsn[elem.first].insert(oids_per_lsn[elem.first].end(), elem.second.begin(), elem.second.end());
@@ -443,6 +465,7 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
               idx_t oid = oids[o];
               in_right[o] = right[oid];
             }
+            // std::cout << "get right 1" << std::endl;
             vector<data_ptr_t> scatter_keys(in_right.size());
             get_perfect_right_match(in_right, scatter_keys);
             get_right_match(scatter_keys, right_oids_per_lsn);
@@ -465,6 +488,7 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
               idx_t oid = oids[o];
               in_right[o] = payload[oid];
             }
+            // std::cout << "get right 2" << std::endl;
             get_right_match(in_right, right_oids_per_lsn);
           }
           if (lhs) {
@@ -510,6 +534,7 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
       } else { // 4
         child->LQ( oids_per_lsn, sources );
         oids_per_lsn.clear();
+        // /std::cout << "right child " << right_oids_per_lsn.size() << std::endl;
         GetNextChild(children[1])->LQ( right_oids_per_lsn, sources );
       }
       break;
@@ -533,7 +558,6 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
       if (it == child->thread_vec.end()) continue; // ASSERT
       idx_t child_tid = std::distance(child->thread_vec.begin(), it);
       idx_t in_pk = encode(lsn, child_tid, child_max_threads);
-      std::cout << "add limit" << in_pk << e.second.size() << std::endl;
       oids_per_lsn[in_pk] = std::move(e.second);
     }
     child->LQ( oids_per_lsn, sources );
@@ -594,32 +618,12 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
       oids_per_lsn.clear();
       rchild->LQ( right_oids_per_lsn, sources );
     break;
-  } case PhysicalOperatorType::CROSS_PRODUCT: {
-    /*
-    if (data_idx >= log->cross_log.size()) return {};
-    int lsn = log->execute_internal[data_idx].first-1;
-
-    idx_t branch_scan_lhs = log->cross_log[lsn].branch_scan_lhs;
-    idx_t count = log->cross_log[lsn].count;
-    idx_t offset = log->cross_log[lsn].in_start;
-    idx_t position_in_chunk = log->cross_log[lsn].position_in_chunk;
-    idx_t scan_position = log->cross_log[lsn].scan_position;
-    
-    if (branch_scan_lhs == false) {
-      output[0].push_back(local_oid+offset);
-      output[1].push_back(scan_position + position_in_chunk);
-    } else {
-      output[0].push_back(offset + position_in_chunk);
-      output[1].push_back(local_oid+scan_position);
-    }
-    break;
-    */
-    } default: {}	}
+  } default: {}	}
 
 }
 
 vector<idx_t> OperatorLineage::ResolveGlobal(idx_t oid) {
-  bool debug = true;
+  bool debug = false;
   if (debug)
     std::cout << "ResolveGlobal: " << oid << " " << thread_vec.size() << std::endl;
   // iterate over all partitions
@@ -715,20 +719,19 @@ vector<idx_t> OperatorLineage::ResolveGlobal(idx_t oid) {
     }
 		break;
   } case PhysicalOperatorType::STREAMING_LIMIT: {
-    std::cout << "limit " << std::endl;
     for (idx_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
       shared_ptr<Log>& tlog = log[tkey];
       idx_t total = 0;
-      std::cout << "limit " << tlog->limit_offset.size() << std::endl;
+      if (debug) std::cout << "limit " << tlog->limit_offset.size() << std::endl;
       for (idx_t lsn=0; lsn < tlog->limit_offset.size(); lsn++) {
         idx_t start = tlog->limit_offset[lsn].start;
         idx_t count = tlog->limit_offset[lsn].end;
         idx_t offset = tlog->limit_offset[lsn].in_start;
-        std::cout << oid << " limit: " << start << " " << count << " " << offset << " " << lsn << " " << i << " " << max_threads << std::endl;
+        if (debug) std::cout << oid << " limit: " << start << " " << count << " "
+          << offset << " " << lsn << " " << i << " " << max_threads << std::endl;
         if (oid >= total && oid < total + count) {
           idx_t pk = encode(lsn, i, max_threads);
-          std::cout << "success" << std::endl;
           // todo: check if pipeline breaker or pipelined to get lsn
           // pipelined, get in_lsn; else run resolve on next child
           return {pk, oid+offset};
