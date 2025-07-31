@@ -19,6 +19,7 @@ parser.add_argument('--folder', type=str, help='queries folder', default='benchm
 parser.add_argument('--sf', type=float, help="sf scale", default=1)
 parser.add_argument('--qid', type=int, help="query id", default=1)
 parser.add_argument('--opid', type=int, help="operator id", default=1)
+parser.add_argument('--oid', type=int, help="operator id", default=0)
 args = parser.parse_args()
 
 prefix = args.folder + "queries-v2/q"

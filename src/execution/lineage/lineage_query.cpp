@@ -404,26 +404,66 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
                 }
                   
                 if (type == PhysicalOperatorType::HASH_GROUP_BY) {
-                    for (int k=0; k < ttlog->scatter_log.size(); ++k) {
-                      idx_t in_pk = encode(k, child_tid, child_max_threads);
-                      idx_t count = ttlog->scatter_log[k].count;
-                      data_ptr_t* payload = ttlog->scatter_log[k].addresses;
-                      for (idx_t j=0; j < count; ++j) {
-                        if (payload[j] == p.second) oids_per_lsn[in_pk].emplace_back(j);
+                    if (ttlog->scatter_log_inverse.empty()) {
+                      for (int k=0; k < ttlog->scatter_log.size(); ++k) {
+                        idx_t in_pk = encode(k, child_tid, child_max_threads);
+                        idx_t count = ttlog->scatter_log[k].count;
+                        data_ptr_t* payload = ttlog->scatter_log[k].addresses;
+                        if (log_context.size() > 1 || oids.size() > 1) {
+                          for (idx_t j=0; j < count; ++j) {
+                            ttlog->scatter_log_inverse[payload[j]].insert(k); // useless. ues scatter_log_index_full
+                            if (payload[j] == p.second) oids_per_lsn[in_pk].emplace_back(j);
+                          }
+                        } else {
+                          for (idx_t j=0; j < count; ++j) {
+                            if (payload[j] == p.second) oids_per_lsn[in_pk].emplace_back(j);
+                          }
+                        }
+                      }
+                    } else {
+                      for (auto k : ttlog->scatter_log_inverse[p.second]) {
+                        idx_t in_pk = encode(k, child_tid, child_max_threads);
+                        idx_t count = ttlog->scatter_log[k].count;
+                        data_ptr_t* payload = ttlog->scatter_log[k].addresses;
+                        for (idx_t j=0; j < count; ++j) {
+                          if (payload[j] == p.second) oids_per_lsn[in_pk].emplace_back(j);
+                        }
                       }
                     }
                 } else { // 4
+                    if (ttlog->scatter_log_inverse.empty()) {
                       for (int k=0; k < ttlog->int_scatter_log.size(); ++k) { // 3
                         int tuple_size = ttlog->tuple_size;
                         uintptr_t fixed = ttlog->fixed;
                         idx_t in_pk = encode(k, child_tid, child_max_threads);
                         int* payload = ttlog->int_scatter_log[k].addresses;
                         idx_t count = ttlog->int_scatter_log[k].count;
-                        for (idx_t j=0; j < count; ++j) {
-                          data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
-                          if (key == p.second) oids_per_lsn[in_pk].emplace_back(j);
+                        if (log_context.size() > 1 || oids.size() > 1) {
+                          for (idx_t j=0; j < count; ++j) {
+                            data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
+                            ttlog->scatter_log_inverse[key].insert(k); // if incremental and parent = agg
+                            if (key == p.second) oids_per_lsn[in_pk].emplace_back(j);
+                          }
+                        } else {
+                          for (idx_t j=0; j < count; ++j) {
+                            data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
+                            if (key == p.second) oids_per_lsn[in_pk].emplace_back(j);
+                          }
                         }
                       } // 3
+                    } else {
+                      for (auto k : ttlog->scatter_log_inverse[p.second]) {
+                        int tuple_size = ttlog->tuple_size;
+                        uintptr_t fixed = ttlog->fixed;
+                        idx_t in_pk = encode(k, child_tid, child_max_threads);
+                        idx_t count = ttlog->int_scatter_log[k].count;
+                        int* payload = ttlog->int_scatter_log[k].addresses;
+                        for (idx_t j=0; j < count; ++j) {
+                            data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
+                          if (key == p.second) oids_per_lsn[in_pk].emplace_back(j);
+                        }
+                      }
+                    }
               } // 4
             } // 5
           } // 6

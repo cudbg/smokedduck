@@ -183,6 +183,7 @@ public:
   
   vector<unordered_map<data_ptr_t, bool>> scatter_log_set;
   vector<unordered_map<data_ptr_t, vector<idx_t>>> scatter_log_index;
+  unordered_map<data_ptr_t, set<idx_t>> scatter_log_inverse;
 
 	vector<int_address_artifact> int_scatter_log;
 
