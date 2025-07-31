@@ -94,9 +94,9 @@ global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "o
 
 def mktemplate(overheadType, prefix, table, header):
     return f"""
-    SELECT '{overheadType}' as overheadtype, {header}, lineage_type as system,
+    SELECT uid, '{overheadType}' as overheadtype, {header}, lineage_type as system,
            greatest(0, {prefix}overhead) as overhead, greatest(0, {prefix}roverhead) as roverhead, output_size
-    FROM {table}"""
+    FROM (select ROW_NUMBER() OVER () as uid, * from {table}) as t"""
 
 template = f"""
   WITH data as (
@@ -172,7 +172,7 @@ if plot_filter:
     data  = con.execute(template.format(g, g, g, where)).fetchdf()
     
     #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
-    global_df = con.execute("select system, 'FILTER' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+    global_df = con.execute("select uid, system, 'FILTER' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
 
     data = con.execute("""select 'SD' as sys_label, * from data where system='SmokedDuck' UNION ALL 
     SELECT 'Logical' as sys_label, * from data where system='Perm' """).df()
@@ -268,9 +268,9 @@ if plot_join:
         data  = con.execute(template.format(g, g, g, where)).fetchdf()
         if len(global_df) == 0:
             #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
-            global_df = con.execute("select system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+            global_df = con.execute("select uid, system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
         global_df = con.execute("""select * from global_df UNION ALL
-        select system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
+        select uid, system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
         """).df()
         sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
         print(sample_data)
@@ -316,9 +316,9 @@ if plot_ineq:
         data  = con.execute(template.format(g, g, g, where)).fetchdf()
         if len(global_df) == 0:
             #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
-            global_df = con.execute("select system, 'Ineq' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+            global_df = con.execute("select uid, system, 'Ineq' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
         global_df = con.execute("""select * from global_df UNION ALL
-        select system, 'Ineq' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
+        select uid, system, 'Ineq' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
         """).df()
         print(data)
         # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
@@ -355,9 +355,9 @@ if plot_ineq:
         
         if len(global_df) == 0:
             #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
-            global_df = con.execute("select system, 'Cross' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+            global_df = con.execute("select uid, system, 'Cross' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
         global_df = con.execute("""select * from global_df UNION ALL
-        select system, 'Cross' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
+        select uid, system, 'Cross' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
         """).df()
 
         print(data)
@@ -394,9 +394,9 @@ if plot_join_mtn:
         data  = con.execute(template.format(g, g, g, where)).fetchdf()
         if len(global_df) == 0:
             #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
-            global_df = con.execute("select system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+            global_df = con.execute("select uid, system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
         global_df = con.execute("""select * from global_df UNION ALL
-        select system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
+        select uid, system, 'HJ' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
         """).df()
 
         sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
@@ -470,9 +470,9 @@ if plot_agg:
     
     if len(global_df) == 0:
         #global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
-        global_df = con.execute("select system, 'HA' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
+        global_df = con.execute("select uid, system, 'HA' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data").df()
     global_df = con.execute("""select * from global_df UNION ALL
-    select system, 'HA' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
+    select uid, system, 'HA' as query, op_name as operator, roverhead, overhead, overheadType, output_size from data
     """).df()
     sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
     print(con.execute("select * from data where system='Perm'").df())
@@ -564,14 +564,34 @@ plot_data['sys_label'] = plot_data['system'].apply(system_d.get)
 p = ggplot(plot_data, aes(x="roverhead", y="label", color="sys_label", shape="sys_label"))
 #p += geom_point()
 p += geom_jitter(width=0, height=0.1, alpha=0.7)
-p += geom_vline(aes(xintercept=20, linetype=esc("dotted")))
+p += geom_vline(xintercept=20, linetype=esc("dotted"))
 x_type, y_type, y_label, x_label = "log10", "discrete", "Query", "Relative Overhead (%) [log]"
 xkwargs=dict(breaks=[1, 20,100,1000], labels=list(map(esc,['1','20','100','1000'])))
 p += axis_labels(x_label, "",  x_type, y_type, xkwargs=xkwargs)
 p += legend_top
-ggsave("figures/micro_all.png", p,  width="5", height="4", scale=0.8)
+ggsave("figures/micro_all.png", p,  width="5", height="3.5", scale=0.8)
 
+# Plot for each query, the overhead added by each physical operator
+
+# 1) summary per system per query type / normalize by output size?
 print(con.execute("""select system, operator, overheadType, avg(roverhead), max(roverhead), min(roverhead)
     from global_df group by system, operator, overheadType order by system, operator, overheadType""").df().to_string())
 
-# Plot for each query, the overhead added by each physical operator
+
+mat_vs_exec = con.execute("""select system, operator, avg(total.roverhead), max(total.roverhead),
+                  avg(ref.roverhead/total.roverhead)*100 mat_avg,
+                  max(ref.roverhead/total.roverhead)*100 mat_max,
+                  min(ref.roverhead/total.roverhead)*100 min_max,
+                  avg((total.roverhead-ref.roverhead)/total.roverhead)*100 exec_avg,
+                  max((total.roverhead-ref.roverhead)/total.roverhead)*100 exec_max,
+                  min((total.roverhead-ref.roverhead)/total.roverhead)*100 exec_min
+    from (select * from global_df where overheadType='Materialize') as ref JOIN
+    (select * from global_df where overheadType='Total') as total USING (system, operator, uid)
+    where system='Perm'
+    group by system, operator order by exec_max""").df()
+print(mat_vs_exec)
+print(con.execute("""select avg(mat_avg), max(mat_max), avg(exec_avg), max(exec_max) from mat_vs_exec""").df().to_string())
+
+# 2) summary per system 
+print(con.execute("""select system, overheadType, avg(roverhead), max(roverhead), min(roverhead)
+    from global_df group by system, overheadType order by system, overheadType""").df().to_string())

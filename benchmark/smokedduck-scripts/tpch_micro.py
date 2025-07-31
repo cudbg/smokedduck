@@ -134,7 +134,7 @@ for idx, y_axis in enumerate(y_axis_list):
     p = ggplot(roverhead_per_q_per_op, aes(x='query', ymin=0, ymax=y_axis,  y=y_axis, color='operator', fill='operator', group='operator'))
     p += geom_bar(stat=esc('identity'), alpha=0.8)
     p += axis_labels('Query', "{} (log)".format(header[idx]), "discrete", "log10") #", ykwargs=dict(breaks=[20, 100, 1000], labels=list(map(esc, ['20', '100', '1000']))))
-    p += geom_hline(aes(yintercept=20, linetype=esc("dotted")))
+    p += geom_hline(yintercept=20, linetype=esc("dotted"))
     p += legend_side
     p += facet_grid(".~sf~n_threads~system", scales=esc("free_x"), space=esc("free_x"))
     postfix = """data$query= factor(data$query, levels=c({}))""".format(queries_order)

@@ -134,7 +134,7 @@ if 1:
             p += axis_labels('Query', "{} (log)".format(header[idx]), "discrete", "log10", ykwargs=dict(breaks=[10, 100, 1000], labels=list(map(esc, ['10', '100', '1000']))))
         else:
             p += axis_labels('Query', "{} (log)".format(header[idx]), "discrete", "log10", ykwargs=dict(breaks=[10, 100, 1000], labels=list(map(esc, ['10', '100', '1000']))))
-            p += geom_hline(aes(yintercept=20, linetype=esc("dotted")))
+            p += geom_hline(yintercept=20, linetype=esc("dotted"))
         p += legend_side
         p += facet_grid(".~qtype", scales=esc("free_x"), space=esc("free_x"))
         postfix = """data$qid= factor(data$qid, levels=c({}))""".format(queries_order)
