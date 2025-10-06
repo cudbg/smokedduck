@@ -24,6 +24,7 @@ parser.add_argument('--run_ineq', action='store_true',  help="eval ineq join")
 parser.add_argument('--run_hj', action='store_true',  help="eval hash join fkpk")
 parser.add_argument('--run_hj_mtn', action='store_true',  help="eval hash join mtn")
 parser.add_argument('--run_agg', action='store_true',  help="eval agg")
+parser.add_argument('--mat', action='store_true',  help="store in lineage table")
 
 args = parser.parse_args()
 args.profile = True

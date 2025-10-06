@@ -15,12 +15,16 @@ def core_mtn(con, args, op, table1, table2):
         perm_rid = "zipf1.rowid as zipf1_rowid, zipf2.rowid as zipf2_rowid,"
     q = f"SELECT {perm_rid}zipf2.idx, zipf1.v FROM {table1} zipf1, {table2} zipf2 WHERE zipf1.z=zipf2.z"
     table_name = None
-    q = "create temp table perm_lineage as "+ q
-    table_name='perm_lineage'
+    if args.mat:
+        q = "create temp table perm_lineage as "+ q
+        table_name='perm_lineage'
     avg, df = Run(q, args, con, table_name)
-    df = con.execute("select count(*) as c from perm_lineage").fetchdf()
-    output_size = df.loc[0,'c']
-    con.execute("drop table perm_lineage")
+    if args.mat:
+        df = con.execute("select count(*) as c from perm_lineage").fetchdf()
+        output_size = df.loc[0,'c']
+        con.execute("drop table perm_lineage")
+    else:
+        output_size = len(df)
 
     return q, output_size, avg
 
@@ -50,7 +54,7 @@ def MtM(con, iter, args, lineage_type, groups, cardinality, a_list, results, op,
         
         lineage_size_mb, lineage_count, nchunks, postprocess  = 0, 0, 0, 0
         if args.lineage:
-            lineage_size_mb, lineage_count, nchunks, postprocess, plan = getStats(con, q)
+            lineage_size_mb, lineage_count, nchunks, postprocess, _, plan = getStats(con, q)
         plan_timings, plan_full = parse_plan_timings(args.qid)
         results.append({'iter': iter, 'op_name': f'{op}_mtm{varchar}', 'runtime': avg, 'n1': n1, 'n2': card,
             'sel': sel, 'skew': a, 'ncol': p, 'groups': g,
@@ -79,12 +83,16 @@ def core_pkfk(con, args, op, ft_table):
         perm_rid = "FT.rowid as FT_rowid, PT.rowid as PT_rowid,"
     q = f"""SELECT {perm_rid}FT.v, PT.id FROM PT , {ft_table} as FT WHERE PT.id=FT.z"""
     table_name = None
-    q = "create temp table perm_lineage as "+ q
-    table_name='perm_lineage'
+    if args.mat:
+        q = "create temp table perm_lineage as "+ q
+        table_name='perm_lineage'
     avg, df = Run(q, args, con, table_name)
-    df = con.execute("select count(*) as c from perm_lineage").fetchdf()
-    output_size = df.loc[0,'c']
-    con.execute("drop table perm_lineage")
+    if args.mat:
+        df = con.execute("select count(*) as c from perm_lineage").fetchdf()
+        output_size = df.loc[0,'c']
+        con.execute("drop table perm_lineage")
+    else:
+        output_size = len(df)
 
     return q, output_size, avg
 
@@ -108,7 +116,7 @@ def FKPK(con, iter, args, lineage_type, groups, cardinality, a_list, results, op
             print(avg_runtime, output_size)
             lineage_size_mb, lineage_count, nchunks, postprocess  = 0, 0, 0, 0
             if args.lineage:
-                lineage_size_mb, lineage_count, nchunks, postprocess, plan = getStats(con, q)
+                lineage_size_mb, lineage_count, nchunks, postprocess, _, plan = getStats(con, q)
             plan_timings, plan_full = parse_plan_timings(args.qid)
             results.append({'iter': iter, 'op_name': f'{op}{varchar}', 'runtime': avg_runtime, 'n1': card,
                 'n2': g, 'sel': -1, 'skew': a, 'ncol': p, 'groups': g,
@@ -186,12 +194,16 @@ def core_join_less(con, args, pred):
         perm_rid = "t1.rowid as r1_rowid, t2.rowid as t2_rowid, "
     q = f"select {perm_rid}* from t1, t2{pred}"
     table_name = None
-    q = "create temp table zipf1_perm_lineage as "+ q
-    table_name='zipf1_perm_lineage'
+    if args.mat:
+        q = "create temp table zipf1_perm_lineage as "+ q
+        table_name='zipf1_perm_lineage'
     avg, df = Run(q, args, con, table_name)
-    df = con.execute("select count(*) as c from zipf1_perm_lineage").fetchdf()
-    output_size = df.loc[0,'c']
-    con.execute("drop table zipf1_perm_lineage")
+    if args.mat:
+        df = con.execute("select count(*) as c from zipf1_perm_lineage").fetchdf()
+        output_size = df.loc[0,'c']
+        con.execute("drop table zipf1_perm_lineage")
+    else:
+        output_size = len(df)
     return q, output_size, avg
 
 
@@ -227,7 +239,7 @@ def join_lessthan(con, iter, args, lineage_type, cardinality, results, op, force
 
         lineage_size_mb, lineage_count, nchunks, postprocess  = 0, 0, 0, 0
         if args.lineage:
-            lineage_size_mb, lineage_count, nchunks, postprocess, plan = getStats(con, q)
+            lineage_size_mb, lineage_count, nchunks, postprocess, _, plan = getStats(con, q)
         plan_timings, plan_full = parse_plan_timings(args.qid)
         results.append({'iter': iter, 'op_name': op, 'runtime': runtime_avg, 'n1': card[0],
             'n2': card[1], 'sel': sel, 'skew': -1, 'ncol': p, 'groups': -1,

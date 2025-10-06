@@ -1,5 +1,5 @@
 SELECT
-    sum(l_extendedprice * (1 - l_discount)) AS revenue
+    sum(l_extendedprice * (1 - l_discount)) AS revenue,
 FROM
     lineitem,
     part
@@ -26,4 +26,4 @@ WHERE (p_partkey = l_partkey
         AND l_quantity <= 20 + 10
         AND p_size BETWEEN 1 AND 15
         AND l_shipmode IN ('AIR', 'AIR REG')
-        AND l_shipinstruct = 'DELIVER IN PERSON');
+        AND l_shipinstruct = 'DELIVER IN PERSON')

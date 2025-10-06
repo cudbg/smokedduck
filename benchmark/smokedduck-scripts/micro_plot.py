@@ -1,3 +1,5 @@
+# all except ineq (mat): micro_benchmark_exp_20250919_1548.out
+# all except ineq (no mat): micro_benchmark_exp_20250919_1403.out
 from itertools import product
 import json
 import pandas as pd
@@ -46,9 +48,12 @@ max(nchunks) as nchunks,
 max(postprocess) as postprocess,
 avg(runtime) as runtime"""
 
+#avg(getAllExec(plan_timings)) as all_t,
+#avg(getMat(plan_timings)) as mat_t,
+#avg(getAllExec(plan_timings) - getMat(plan_timings)) as exec_t
 avg_overhead = """
-avg(getAllExec(plan_timings)) as all_t,
-avg(getMat(plan_timings)) as mat_t,
+avg(runtime) as all_t,
+avg(runtime - (getAllExec(plan_timings) - getMat(plan_timings))) as mat_t,
 avg(getAllExec(plan_timings) - getMat(plan_timings)) as exec_t
 """
 
@@ -64,31 +69,17 @@ t2.*
 
 perm_overheads = """
 (exec_t-base_exec_t)*1000 as exec_overhead,
-((exec_t-base_exec_t)/base_exec_t)*100 as exec_roverhead,
+((exec_t-base_exec_t)/base_all_t)*100 as exec_roverhead,
 
 (mat_t - base_mat_t)*1000 as mat_overhead,
-((mat_t - base_mat_t) / base_exec_t) *100 as mat_roverhead,
+((mat_t - base_mat_t) /base_all_t) *100 as mat_roverhead,
 
 (all_t-base_all_t)*1000 as all_overhead,
-((all_t-base_all_t)/base_exec_t)*100 as all_roverhead,
-
-(op_t-base_op_t)*1000 as op_overhead,
-((op_t-base_op_t)/base_op_t)*100 as op_roverhead,
+((all_t-base_all_t)/base_all_t)*100 as all_roverhead,
 """
 
-sd_overheads = """
-(exec_t-base_exec_t)*1000 as exec_overhead,
-((exec_t-base_exec_t)/base_exec_t)*100 as exec_roverhead,
 
-0 as mat_overhead,
-0 as mat_roverhead,
-
-(exec_t-base_exec_t)*1000 as all_overhead,
-((exec_t-base_exec_t)/base_exec_t)*100 as all_roverhead,
-
-(op_t-base_op_t)*1000 as op_overhead,
-((op_t-base_op_t)/base_op_t)*100 as op_roverhead,
-"""
+sd_overheads = perm_overheads
 
 global_df = pd.DataFrame(columns=["system", "query", "operator", "roverhead", "overhead", "overheadType", "output_size"])
 

@@ -1,4 +1,3 @@
-CREATE temp TABLE lineage as (
 SELECT
     p_brand, p_type, p_size,
     count(DISTINCT ps_suppkey) over (partition by p_brand, p_type, p_size) AS supplier_cnt
@@ -15,4 +14,3 @@ WHERE
             supplier
         WHERE
             s_comment LIKE '%Customer%Complaints%')
-);

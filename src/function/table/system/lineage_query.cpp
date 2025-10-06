@@ -1,19 +1,26 @@
-// 19: 0.0006
-// 18: ?
-// 16: opid16?
-// 15: TODO (agg, agg)
+// 22: Mark Join                                      ?
+// 18: (1.3) SEMI JOIN ?? HJ 3                        ?
+// 16: opid16? SEMI / ANTI SEMI  (MARK JOIN)                     ?
+//
+// 21: 
+// 20: 
+// 19: (0.05) 0.0006
+// 17: 
+// 15: (0.16) 0.0003 TODO (agg, agg) DELIM JOIN?
 // 14: 0.008
-// 13: TOO expensive, nested agg
+// 13: (index 1) 0.012
 // 12: X -> (0.004) 0.007 | (0.05) 0.09
-// 11  NLJ
+// 11  0.002
 // 10: X -> (0.04) 0.0004 | (0.4) 0.006 
 // 9: 1.3 -> (index: 0.05) 0.004 | (1) 0.06
 // 8: 0.180 -> (index: 0.008) 0.01 | (index: 0.1) 0.03
 // 7: 3.2 -> (index: 0.3) 0.003 | (3) 0.06
 // 5: 0.280 -> (index: 0.01) 0.003 | (0.1) 0.04
 // 6: 0.001
+// 4: 
 // 3: X -> (index: 0.02) 0.0006 | (0.4) 0.003
-// 1: 0.06 | 0.6-> ?
+// 2:
+// 1: (0.2) 0.02 | 0.2->                                  
 #ifdef LINEAGE
 
 #include "duckdb/execution/lineage/lineage_manager.hpp"
@@ -95,9 +102,9 @@ static unique_ptr<FunctionData> LineageQueryBind(ClientContext &context, TableFu
   if (debug) std::cout << "|source| = " << result->out_per_source.size() << std::endl;
 
   return_types.emplace_back(LogicalType::ROW_TYPE);
-  names.emplace_back("table");
-  return_types.emplace_back(LogicalType::ROW_TYPE);
   names.emplace_back("oid");
+  return_types.emplace_back(LogicalType::ROW_TYPE);
+  names.emplace_back("table");
   return_types.emplace_back(LogicalType::ROW_TYPE);
   names.emplace_back("iid");
   

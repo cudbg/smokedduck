@@ -26,4 +26,4 @@ WHERE
             max(total_revenue)
         FROM revenue0)
 ORDER BY
-    s_suppkey;
+    s_suppkey

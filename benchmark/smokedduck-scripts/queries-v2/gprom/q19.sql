@@ -1,4 +1,3 @@
-create temp table lineage as (
 SELECT
     sum(l_extendedprice * (1 - l_discount)) over () AS revenue,
     lineitem.rowid,part.rowid
@@ -29,4 +28,3 @@ WHERE (p_partkey = l_partkey
         AND p_size BETWEEN 1 AND 15
         AND l_shipmode IN ('AIR', 'AIR REG')
         AND l_shipinstruct = 'DELIVER IN PERSON')
-    );

@@ -75,9 +75,8 @@ def get_predicates(df, test_out, qkeys):
     return predicates
 
 
-#for qid in [1,3,5,6,7,8,9,10,12,19]: #range(1, 23):
 for qid in range(1, 23):
-    if qid in [16, 18, 22]: continue
+    if qid in [16]: continue
     print("=======" + str(qid) + "========")
     args.qid = qid
     
@@ -102,9 +101,7 @@ for qid in range(1, 23):
 
     lineage = args.lineage
     args.lineage = False
-    con.execute("PRAGMA threads=16")
     base_avg, df = Run(base_q, args, con)
-    con.execute("PRAGMA threads=1")
     base_plan_timings = {}
     base_plan_full = {}
     if args.profile:
@@ -137,7 +134,7 @@ for qid in range(1, 23):
         nchunks = query_info.loc[nl, 'nchunks']
         postprocess_time = query_info.loc[nl, 'postprocess_time']
         build_time = query_info.loc[nl, 'build_time']
-        print("--->", query_id, build_time)
+        print("---> qid", query_id, "build time: ", build_time)
         
         for oid in test_out:
             start = timer()
@@ -171,7 +168,7 @@ for qid in range(1, 23):
                 plan_timings, plan_full = parse_plan_timings(args.qid)
             # return how many tuples returned by the BW query
             output_size = df_out.loc[0, 'c']
-            print(avg, base_avg)
+            print("avg: ", avg, "base avg: ", base_avg)
             results.append({'query': qid, 'runtime': avg, 'sf': args.sf, 
                 'build_time': 0, 'post_process': 0, 'lineage_size': 0, 'lineage_count': 0, 'nchunks': 0,
                 'repeat': args.repeat, 'lineage_type': "Logical-RID", 

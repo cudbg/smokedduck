@@ -27,4 +27,4 @@ WHERE
 GROUP BY
     l_shipmode
 ORDER BY
-    l_shipmode;
+    l_shipmode

@@ -541,7 +541,6 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
 				D_ASSERT(vector.GetType() == ht.layout.GetTypes()[output_col_idx]);
 				GatherResult(vector, result_vector, result_count, output_col_idx);
 			}
-		}
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log && result_count > 0) {
       auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
@@ -558,6 +557,7 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
       active_log->latest.first = active_log->join_gather_log.size();
     }
 #endif
+		}
 		AdvancePointers();
 	}
 }
@@ -606,6 +606,7 @@ void ScanStructure::NextSemiOrAntiJoin(DataChunk &keys, DataChunk &left, DataChu
 			sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t)*result_count);
 			std::copy(sel.data(), sel.data() + result_count, sel_copy);
 			active_log->join_gather_log.emplace_back(nullptr, sel_copy, result_count, active_log->in_start);
+      active_log->latest.first = active_log->join_gather_log.size();
 		}
 #endif
 	} else {
@@ -637,6 +638,12 @@ void ScanStructure::ConstructMarkJoinResult(DataChunk &join_keys, DataChunk &chi
 	for (idx_t i = 0; i < child.ColumnCount(); i++) {
 		result.data[i].Reference(child.data[i]);
 	}
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log && result.size() > 0) {
+      active_log->join_gather_log.emplace_back(nullptr, nullptr, child.size(), active_log->in_start);
+      active_log->latest.first = active_log->join_gather_log.size();
+    }
+#endif
 	auto &mark_vector = result.data.back();
 	mark_vector.SetVectorType(VectorType::FLAT_VECTOR);
 	// first we set the NULL values from the join keys
@@ -685,6 +692,7 @@ void ScanStructure::NextMarkJoin(DataChunk &keys, DataChunk &input, DataChunk &r
 		ConstructMarkJoinResult(keys, input, result);
 	} else {
 		auto &info = ht.correlated_mark_join_info;
+    std::cout << "TODO: capture correlated mark join" << std::endl;
 		lock_guard<mutex> mj_lock(info.mj_lock);
 
 		// there are correlated columns
@@ -694,6 +702,7 @@ void ScanStructure::NextMarkJoin(DataChunk &keys, DataChunk &input, DataChunk &r
 		for (idx_t i = 0; i < info.group_chunk.ColumnCount(); i++) {
 			info.group_chunk.data[i].Reference(keys.data[i]);
 		}
+    // TODO: capture lineage
 		info.correlated_counts->FetchAggregates(info.group_chunk, info.result_chunk);
 
 		// for the initial set of columns we just reference the left side
@@ -775,6 +784,7 @@ void ScanStructure::NextLeftJoin(DataChunk &keys, DataChunk &left, DataChunk &re
 				  std::copy(sel.data(), sel.data() + remaining_count, sel_copy);
         }
 				active_log->join_gather_log.emplace_back(nullptr, sel_copy, remaining_count, active_log->in_start);
+        active_log->latest.first = active_log->join_gather_log.size();
 			}
 #endif
 
@@ -839,6 +849,7 @@ void ScanStructure::NextSingleJoin(DataChunk &keys, DataChunk &input, DataChunk 
 		sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t) * result_count);
 		std::copy(result_sel.data(), result_sel.data() + result_count, sel_copy);
 		active_log->join_gather_log.emplace_back(rhs_ptrs, sel_copy, result_count, active_log->in_start);
+    active_log->latest.first = active_log->join_gather_log.size();
 	}
 #endif
 

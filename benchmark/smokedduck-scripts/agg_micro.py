@@ -23,12 +23,16 @@ def core_aggs(args, con, tname):
     elif args.perm:
         q = f"SELECT zipf1.rowid as rid, z, c FROM (SELECT z, count(*) as c FROM {tname} GROUP BY z) as temp join {tname} zipf1 using (z)"
 
-    q = "create temp table zipf1_perm_lineage as "+ q
-    table_name='zipf1_perm_lineage'
+    if args.mat:
+        q = "create temp table zipf1_perm_lineage as "+ q
+        table_name='zipf1_perm_lineage'
     avg, df = Run(q, args, con, table_name)
-    df = con.execute("select count(*) as c from zipf1_perm_lineage").fetchdf()
-    output_size = df.loc[0,'c']
-    con.execute("drop table zipf1_perm_lineage")
+    if args.mat:
+        df = con.execute("select count(*) as c from zipf1_perm_lineage").fetchdf()
+        output_size = df.loc[0,'c']
+        con.execute("drop table zipf1_perm_lineage")
+    else:
+        output_size = len(df)
 
     return q, output_size, avg, method
 
@@ -56,7 +60,7 @@ def int_hashAgg(con, iter, args, lineage_type, groups, cardinality, results, agg
         q, output_size, avg, method = core_aggs(args, con, zipf1)
         lineage_size, lineage_count, nchunks, postprocess  = 0, 0, 0, 0
         if args.lineage:
-            lineage_size, lineage_count, nchunks, postprocess, plan = getStats(con, q)
+            lineage_size, lineage_count, nchunks, postprocess, _, plan = getStats(con, q)
         plan_timings, plan_full = parse_plan_timings(args.qid)
         results.append({'iter': iter, 'op_name': agg_type, 'runtime': avg,
             'card': card, 'col': p, 'groups': g,
@@ -92,15 +96,19 @@ def hashAgg(con, iter, args, lineage_type, groups, cardinality, results):
             method="_list"
         elif args.perm:
             q = f"SELECT zipf1.rowid, z FROM (SELECT z, count(*) FROM {zipf1} GROUP BY z) as temp join {zipf1} zipf1 using (z)"
-        q = "create temp table zipf1_perm_lineage as "+ q
-        table_name='zipf1_perm_lineage'
+        if args.mat:
+            q = "create temp table zipf1_perm_lineage as "+ q
+            table_name='zipf1_perm_lineage'
         avg, df = Run(q, args, con, table_name)
-        df = con.execute("select count(*) as c from zipf1_perm_lineage").fetchdf()
-        output_size = df.loc[0,'c']
-        con.execute("drop table zipf1_perm_lineage")
+        if args.mat:
+            df = con.execute("select count(*) as c from zipf1_perm_lineage").fetchdf()
+            output_size = df.loc[0,'c']
+            con.execute("drop table zipf1_perm_lineage")
+        else:
+            output_size = len(df)
         lineage_size, lineage_count, nchunks, postprocess  = 0, 0, 0, 0
         if args.lineage:
-            lineage_size, lineage_count, nchunks, postprocess, plan = getStats(con, q)
+            lineage_size, lineage_count, nchunks, postprocess, _, plan = getStats(con, q)
         plan_timings, plan_full = parse_plan_timings(args.qid)
         results.append({'iter': iter, 'op_name': 'HASH_GROUP_BY_var', 'runtime': avg,
             'card': card, 'col': p, 'groups': g,

@@ -19,4 +19,4 @@ with lineage as (
   ) using (l_returnflag, l_linestatus)
 )
 
-select count(*), max(lineitem_rowid) as c from lineage
+select count(*) as c, max(lineitem_rowid)  from lineage

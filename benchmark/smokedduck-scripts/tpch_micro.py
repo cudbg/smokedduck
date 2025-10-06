@@ -63,7 +63,7 @@ avg_tpch = con.execute("""select {},
                             avg(plan_runtime) as plan_runtime, avg(runtime) as runtime,
                             avg(output) as output,  avg(mat_time) as mat_time from tpch_all
                             group by {}""".format(g, g)).fetchdf()
-con.execute("INSTALL JSON")
+#con.execute("INSTALL JSON")
 con.execute("LOAD JSON")
 print(con.execute("select plan from tpch_all").df())
 

@@ -20,6 +20,7 @@ shared_ptr<OperatorLineage> GetLop(shared_ptr<OperatorLineage> lop, int opid) {
 // zone map for ResultCollector
 // {oid} -> {lsn}
 void OperatorLineage::BuildIndexes() {
+//  return;
 	for (idx_t i = 0; i < children.size(); i++) {
     children[i]->BuildIndexes();
 	}

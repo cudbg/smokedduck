@@ -13,4 +13,4 @@ WHERE
         FROM
             lineitem
         WHERE
-            l_partkey = p_partkey);
+            l_partkey = p_partkey)

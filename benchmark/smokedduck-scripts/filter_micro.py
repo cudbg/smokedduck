@@ -32,16 +32,20 @@ def FilterMicro(con, iter, args, lineage_type, selectivity, cardinality, results
         q = f"SELECT {perm_rid}* FROM micro_table_{sel_str}_{card} as t1 WHERE z=0"
         table_name = None
         print("-------")
-        q = "create temp table t1_perm_lineage as "+ q
-        table_name='t1_perm_lineage'
+        if args.mat:
+            q = "create temp table t1_perm_lineage as "+ q
+            table_name='t1_perm_lineage'
         avg, df = Run(q, args, con, table_name)
-        df = con.execute("select count(*) as c from t1_perm_lineage").fetchdf()
-        output_size = df.loc[0,'c']
-        con.execute("drop table t1_perm_lineage")
+        if args.mat:
+            df = con.execute("select count(*) as c from t1_perm_lineage").fetchdf()
+            output_size = df.loc[0,'c']
+            con.execute("drop table t1_perm_lineage")
+        else:
+            output_size = len(df)
         
         lineage_size_mb, lineage_count, nchunks, postprocess  = 0, 0, 0, 0
         if args.lineage:
-            lineage_size_mb, lineage_count, nchunks, postprocess, plan = getStats(con, q)
+            lineage_size_mb, lineage_count, nchunks, postprocess, _, plan = getStats(con, q)
         
         plan_timings, plan_full = parse_plan_timings(args.qid)
         results.append({'iter': iter, 'lineage_type': lineage_type, 'op_name': op_name, 'runtime': avg, 'card': card,

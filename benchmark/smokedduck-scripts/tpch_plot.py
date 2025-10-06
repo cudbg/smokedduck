@@ -28,8 +28,11 @@ con.create_function("getMat", getMat, [VARCHAR], FLOAT)
 con.create_function("getAllExec", getAllExec, [VARCHAR], FLOAT)
 con.create_function("getTime", getTime, [VARCHAR], FLOAT)
 con.create_function("cat", cat, [BIGINT], VARCHAR)
-tpch_df = con.execute("""select *, cat(query) as qtype, getMat(plan_timings) as mat_time, getTime(plan) as plan_runtime,
-    getAllExec(plan_timings) as sum_plan_runtime
+tpch_df = con.execute("""select *, cat(query) as qtype,
+    getTime(plan) as plan_runtime,
+    runtime - (getAllExec(plan_timings) - getMat(plan_timings)) mat_t ,
+    getAllExec(plan_timings) - getMat(plan_timings) as exec_t,
+    runtime as all_t
     from tpch_capture""").df()
 tpch_opt = con.execute("""select * from tpch_df
                     where lineage_type='Logical-RID'
@@ -42,7 +45,7 @@ tpch_all = con.execute("""select * from tpch_df UNION ALL
 header = tpch_all.columns.tolist()
 print(header)
 header_unique = ["query","sf", "qtype", "lineage_type", "n_threads"]
-metrics = ["runtime", "output", "mat_time", "plan_runtime", "lineage_size", "lineage_count", "nchunks", "postprocess_time"]
+metrics = ["mat_t", "exec_t", "all_t", "runtime", "output", "plan_runtime", "lineage_size", "lineage_count", "nchunks", "postprocess_time"]
 g = ','.join(header_unique)
 m = ','.join(metrics)
 avg_tpch = con.execute("""select {},
@@ -50,14 +53,19 @@ avg_tpch = con.execute("""select {},
                             max(lineage_size) as lineage_size, max(lineage_count) as lineage_count,
                             avg(postprocess_time) as postprocess_time,
                             avg(plan_runtime) as plan_runtime, avg(runtime) as runtime,
-                            avg(output) as output,  avg(mat_time) as mat_time from tpch_all
+                            avg(output) as output, 
+                            
+                            avg(all_t) as all_t, avg(exec_t) as exec_t, avg(mat_t) as mat_t
+                            from tpch_all
                             group by {}""".format(g, g)).fetchdf()
 header_unique.remove("lineage_type")
 g = ','.join(header_unique)
 
 tpch_withbaseline = con.execute(f"""select
+                  t1.all_t as base_all_t, t1.exec_t as base_exec_t, t1.mat_t as base_mat_t,
+
                   t1.plan_runtime as base_plan_runtime, t1.runtime as base_runtime,
-                  t1.output as base_output, t1.mat_time as base_mat_time,
+                  t1.output as base_output, 
                   t1.lineage_size as base_lineage_size,
                   t1.lineage_count as base_lineage_count,
                   t1.postprocess_time as base_pp,
@@ -67,12 +75,19 @@ tpch_withbaseline = con.execute(f"""select
 
 tpch_metrics = con.execute("""
 select {}, lineage_type, n_threads, output / base_output as fanout, output, nchunks, lineage_size, lineage_count, postprocess_time,
-((plan_runtime-mat_time)-(base_plan_runtime-base_mat_time))*1000 as exec_overhead,
-(( (plan_runtime-mat_time) - (base_plan_runtime-base_mat_time) )/base_plan_runtime)*100 as exec_roverhead,
-(mat_time - base_mat_time)*1000 as mat_overhead,
-((mat_time - base_mat_time) / base_plan_runtime) *100 as mat_roverhead,
-(plan_runtime-base_plan_runtime)*1000 as overhead,
-((plan_runtime-base_plan_runtime)/base_plan_runtime)*100 as roverhead,
+
+(exec_t-base_exec_t)*1000 as exec_overhead,
+((exec_t-base_exec_t)/base_all_t)*100 as exec_roverhead,
+
+(mat_t - base_mat_t)*1000 as mat_overhead,
+((mat_t - base_mat_t) /base_all_t) *100 as mat_roverhead,
+
+(all_t-base_all_t)*1000 as all_overhead,
+((all_t-base_all_t)/base_all_t)*100 as all_roverhead,
+
+(all_t-base_all_t)*1000 as overhead,
+((all_t-base_all_t)/base_all_t)*100 as roverhead,
+
 from tpch_withbaseline order by qtype, query, n_threads, lineage_type
                   """.format(g, g, g)).fetchdf()
 print(tpch_metrics)
@@ -106,7 +121,7 @@ q = template.format(where)
 print(q)
 data = con.execute(q).fetchdf()
 data = con.execute("select * from data where system<>'Baseline'").df()
-sf = 10
+sf = 1
 data_sf = con.execute(f"select * from data where system<>'Baseline' and sf={sf} and n_threads=1").df()
 if 1:
     y_axis_list = ["roverhead", "overhead"]
@@ -225,3 +240,4 @@ join (select * from avg_tpch where lineage_type='SD_Capture' and lineage_size>0)
 where t1.n_threads=1
 group by sf,  t1.lineage_type
     """).df())
+

@@ -1,4 +1,3 @@
-CREATE temp TABLE lineage as (
   select  c_name,  c_custkey,  o_orderkey,  o_orderdate,  o_totalprice,  
   sum_l_quantity,
   c_rid, o_rid, l_rid, in_l.rowid
@@ -18,4 +17,3 @@ CREATE temp TABLE lineage as (
             AND o_orderkey = l_orderkey
   ) as q, lineitem as in_l 
   WHERE q.o_orderkey=in_l.l_orderkey
-);

@@ -22,4 +22,4 @@ WHERE
             AND s_nationkey = n_nationkey
             AND n_name = 'CANADA'
         ORDER BY
-            s_name;
+            s_name

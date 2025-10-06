@@ -1,4 +1,3 @@
-create temp table lineage as (
 SELECT
     c_custkey,
     c_name,
@@ -23,4 +22,3 @@ WHERE
     AND o_orderdate < CAST('1994-01-01' AS date)
     AND l_returnflag = 'R'
     AND c_nationkey = n_nationkey
-);

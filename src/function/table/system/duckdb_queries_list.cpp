@@ -89,15 +89,14 @@ static string JSONSanitize(const string &text) {
 string PlanToString(shared_ptr<OperatorLineage> lop) {
   if (!lop) return "";
 	string child_str;
+ //std::cout << " ################## " << std::endl;
+ //std::cout << lop->name << " " << lop->extra << std::endl;
 	for (idx_t i = 0; i < lop->children.size(); i++) {
 		child_str += PlanToString(lop->children[i]);
 		if (i != lop->children.size() - 1) {
 			child_str += ",";
 		}
 	}
-  // std::cout << " ################## " << std::endl;
-  // std::cout << lop->name << " " << lop->extra << std::endl;
-  // std::cout << " ----------------- " << std::endl;
 	return "{\"name\": \"" + lop->name + "\", \"opid\": \"" + std::to_string(lop->operator_id) + "\", \"children\": [" + child_str + "],\"extra\": \"" + JSONSanitize(lop->extra)+ "\"}";
 }
 

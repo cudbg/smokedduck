@@ -44,6 +44,7 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext 
   if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
 		PhysicalOperator* plan = &dynamic_cast<PhysicalResultCollector*>(op)->plan;
 		shared_ptr<OperatorLineage> lop = CreateOperatorLineage(context, plan);
+//    std::cout << plan->ToString() << std::endl;
 		global_logger[(void*)op]->children.push_back(lop);
 	}
 
@@ -52,7 +53,7 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext 
     if (op->type == PhysicalOperatorType::RIGHT_DELIM_JOIN) {
       cid = 1;
     }
-    std::cout <<  op->ToString() << std::endl;
+    // std::cout <<  op->ToString() << std::endl;
 		auto distinct = (PhysicalOperator*)dynamic_cast<PhysicalDelimJoin *>(op)->distinct.get();
 		shared_ptr<OperatorLineage> distinct_lop = CreateOperatorLineage(context, distinct);
 		shared_ptr<OperatorLineage> join_lop = CreateOperatorLineage(context, dynamic_cast<PhysicalDelimJoin *>(op)->join.get());

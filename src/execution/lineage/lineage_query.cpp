@@ -468,6 +468,16 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
             } // 5
           } // 6
       }
+
+      if (all) {
+        //std::cout << "ALL" << std::endl;
+        for (auto& it_index : scatter_log_index_full) {
+          for (auto& elem : it_index.second) {
+            if (debug) std::cout << "AGGS: in_pk: "<< elem.first << " " << elem.second.size() << std::endl;
+            oids_per_lsn[elem.first].insert(oids_per_lsn[elem.first].end(), elem.second.begin(), elem.second.end());
+          }
+        }
+      }
       if (debug) std::cout << "oids_per_lsn: " << oids_per_lsn.size() << std::endl;
       // if child is agg, then include all
       child->LQ( oids_per_lsn, sources );
@@ -485,7 +495,7 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
         idx_t lsn = tid_lsn.second;
         void* thread_val  = thread_vec[tid_lsn.first];
         auto& tlog = log[thread_val];
-        if (debug) std::cout << "JOIN: tid(" <<  tid_lsn.first << "), lsn(" << tid_lsn.second << ")," << " |oids|: " << oids.size() << std::endl;
+        if (debug) std::cout << "JOIN 1: tid(" <<  tid_lsn.first << "), lsn(" << tid_lsn.second << ")," << " |oids|: " << oids.size() << std::endl;
         
         auto tid_it = thread_vec_map_local.find(thread_val);
         if (tid_it == thread_vec_map_local.end()) continue;
@@ -494,12 +504,18 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
         D_ASSERT(lsn < tlog->execute_internal.size());
         int blsn = tlog->execute_internal[lsn].first-1;
         int in_lsn = tlog->execute_internal[lsn].second-1;
+        if (debug) std::cout << "JOIN 2: blsn(" <<  blsn << "), lsn(" << in_lsn << ")," << " child_tid: " << child_tid << std::endl;
+        if (blsn < 0) continue;
               
         if (!tlog->perfect_probe_ht_log.empty()) {
           idx_t count = tlog->perfect_probe_ht_log[blsn].count;
           auto left = tlog->perfect_probe_ht_log[blsn].left;
           auto right = tlog->perfect_probe_ht_log[blsn].right;
           vector<sel_t> in_right(oids.size());
+          if (!right && !left) { // mark join
+            idx_t in_pk = encode(in_lsn, child_tid, child_max_threads);
+            oids_per_lsn[in_pk] = std::move(oids);
+          }
           if (right) {
             for (idx_t o=0; o < oids.size(); ++o) {
               idx_t oid = oids[o];
@@ -523,6 +539,10 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
           auto payload = tlog->join_gather_log[blsn].rhs;
           auto lhs = tlog->join_gather_log[blsn].lhs;
           vector<data_ptr_t> in_right(oids.size());
+          if (!payload && !lhs) { // mark join
+            idx_t in_pk = encode(in_lsn, child_tid, child_max_threads);
+            oids_per_lsn[in_pk] = std::move(oids);
+          }
           if (payload) {
             for (idx_t o=0; o < oids.size(); ++o) {
               idx_t oid = oids[o];
@@ -540,7 +560,6 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
             oids_per_lsn[in_pk] = std::move(oids);
           }
         }
-                
       }
       
       if (all) { // 4
@@ -572,10 +591,11 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
           } //3
         LQ( oids_per_lsn, sources );
       } else { // 4
-        child->LQ( oids_per_lsn, sources );
+        if (!oids_per_lsn.empty()) child->LQ( oids_per_lsn, sources );
         oids_per_lsn.clear();
         // /std::cout << "right child " << right_oids_per_lsn.size() << std::endl;
-        GetNextChild(children[1])->LQ( right_oids_per_lsn, sources );
+        if (!right_oids_per_lsn.empty())
+          GetNextChild(children[1])->LQ( right_oids_per_lsn, sources );
       }
       break;
   } case PhysicalOperatorType::STREAMING_LIMIT: {
