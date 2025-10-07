@@ -1,0 +1,30 @@
+SELECT
+    ps_partkey,
+    sum(ps_supplycost * ps_availqty) AS value,
+    list(supplier.rowid),
+    list(nation.rowid),
+    list(partsupp.rowid),
+FROM
+    partsupp,
+    supplier,
+    nation
+WHERE
+    ps_suppkey = s_suppkey
+    AND s_nationkey = n_nationkey
+    AND n_name = 'GERMANY'
+GROUP BY
+    ps_partkey
+HAVING
+    sum(ps_supplycost * ps_availqty) > (
+        SELECT
+				    sum(ps_supplycost * ps_availqty) * 0.000100000
+        FROM
+            partsupp,
+            supplier,
+            nation
+        WHERE
+            ps_suppkey = s_suppkey
+            AND s_nationkey = n_nationkey
+            AND n_name = 'GERMANY')
+ORDER BY
+    value DESC
