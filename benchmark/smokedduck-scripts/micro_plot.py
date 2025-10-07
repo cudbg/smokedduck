@@ -1,3 +1,4 @@
+# micro_benchmark_all.db
 from itertools import product
 import json
 import pandas as pd
@@ -477,12 +478,14 @@ if plot_agg:
     sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
     print(con.execute("select * from data where system='Perm'").df())
 
-    sample_data_10m = con.execute("select * from sample_data where card=10000000 and op_name<>'HASH_GROUP_BY' and system<>'Perm_list' and system<>'Smoke'").df()
+    #sample_data_10m = con.execute("select * from sample_data where card=10000000 and op_name<>'HASH_GROUP_BY' and system<>'Perm_list' and system<>'Smoke'").df()
+    sample_data_10m = con.execute("select * from sample_data where card=10000000 and op_name<>'HASH_GROUP_BY' and system<>'Perm_list'").df()
     d = { "PERFECT_HASH_GROUP_BY": "PERFECT HASH GROUP BY", "HASH_GROUP_BY_var": "HASH GROUP BY", "HASH_GROUP_BY": "HASH GROUP BY"}
     sample_data_10m['op_label'] = sample_data_10m['op_name'].apply(d.get)
     sample_data_10m['card'] = sample_data_10m['card'].apply(lambda v: v / 1000000)
     # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
-    system_d = { "SmokedDuck": "SD", "Perm": "Logical", "Smoke": "Smoke"}
+    #system_d = { "SmokedDuck": "SD", "Perm": "Logical", "Smoke": "Smoke"}
+    system_d = { "SmokedDuck": "This work", "Perm": "Logical", "Smoke": "Smoke"}
     sample_data_10m['sys_label'] = sample_data_10m['system'].apply(system_d.get)
     sample_data_10m_10 = con.execute("select * from sample_data_10m where groups=10 and op_name='PERFECT_HASH_GROUP_BY' and overheadtype='Total'").df()
     print(sample_data_10m_10)
@@ -516,6 +519,7 @@ if plot_agg:
         p += axis_labels(x_label, y_label, x_type, y_type)
         p += geom_bar(stat=esc('identity'), alpha=0.8, posiion=position_dodge(width=0.1), width=0.8)
         p += legend_none
+        postfix = """data$sys_label= factor(data$qid, levels=c('Perm', 'Smoke', 'This work'))"""
         ggsave("figures/"+fname, p,  width=w, height=h, scale=0.8)
         
     overheadTypes = ["Total", "Materialize", "Execute"]
@@ -553,7 +557,7 @@ global_df['label'] = global_df['operator'].apply(d.get)
 print(con.execute("select distinct operator from global_df").df())
 #global_df['label'] = pd.Categorical(global_df['label'], categories=desired_order, ordered=True)
 print(con.execute("select * from global_df").df())
-plot_data = con.execute("select * from global_df where system in ('Perm', 'SmokedDuck') and overheadType='Total'").df()
+plot_data = con.execute("select * from global_df where system in ('Perm', 'SmokedDuck') and overheadType='Total' and label<>'CROSS'").df()
 
 legend_top = legend_bottom + theme(**{
   "legend.position":esc("top"),
@@ -569,13 +573,17 @@ x_type, y_type, y_label, x_label = "log10", "discrete", "Query", "Relative Overh
 xkwargs=dict(breaks=[1, 20,100,1000], labels=list(map(esc,['1','20','100','1000'])))
 p += axis_labels(x_label, "",  x_type, y_type, xkwargs=xkwargs)
 p += legend_top
-ggsave("figures/micro_all.png", p,  width="5", height="3.5", scale=0.8)
+postfix = """data$label= factor(data$label, levels=c('PERFECT HG', 'HASH GROUP BY', 'HJ', 'BNL', 'NL', 'Merge', 'FILTER', 'FILTER SCAN'))"""
+ggsave("figures/micro_all.png", p,  postfix=postfix, width="5.3", height="3", scale=0.8)
 
 # Plot for each query, the overhead added by each physical operator
 
 # 1) summary per system per query type / normalize by output size?
 print(con.execute("""select system, operator, overheadType, avg(roverhead), max(roverhead), min(roverhead)
     from global_df group by system, operator, overheadType order by system, operator, overheadType""").df().to_string())
+
+print(con.execute("""select system, overheadType, avg(roverhead), max(roverhead), min(roverhead)
+    from global_df where operator<>'CROSS_PRODUCT' group by system,  overheadType order by system,  overheadType""").df().to_string())
 
 
 mat_vs_exec = con.execute("""select system, operator, avg(total.roverhead), max(total.roverhead),

@@ -225,3 +225,16 @@ join (select * from avg_tpch where lineage_type='SD_Capture' and lineage_size>0)
 where t1.n_threads=1
 group by sf,  t1.lineage_type
     """).df())
+
+q = f"""
+select lineage_type, sf, n_threads,
+avg(exec_roverhead) avg_eroverhead, max(exec_roverhead) max_eroverhead,
+min(exec_roverhead) min_eroverhead,
+avg(mat_roverhead) avg_mroverhead, max(mat_roverhead) max_mroverhead, 
+avg(roverhead) avg_roverhead, max(roverhead) max_roverhead, 
+from tpch_metrics where lineage_type<>'Baseline' and n_threads=1
+group by sf, lineage_type, n_threads
+order by sf, lineage_type, n_threads
+"""
+out = con.execute(q).df()
+print(out)
