@@ -35,4 +35,4 @@ GROUP BY
 ORDER BY
     supp_nation,
     cust_nation,
-    l_year;
+    l_year

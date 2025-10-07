@@ -8,15 +8,34 @@ import os.path
 import json
 from pygg import *
 
-def get_lineage_type(args):
+def get_lineage_type(args): # micr_run.py
     if args.lineage:
-        lineage_type = "SmokedDuck"
+        if args.op_level:
+            lineage_type = "Operator-Level"
+        elif args.hybrid:
+            lineage_type = "Hybrid-Level"
+        else:
+            lineage_type = "Function-Level" # -> Function-Level, SD_Capture
+
+        if args.no_persist:
+            lineage_type += "-Pass"
     elif args.perm:
-        lineage_type = "Perm"
+        # Logical-RID, Logical-OPT, Logical-window, Logical-list
+        lineage_type = "Logical-RID" # not Perm
+        if args.opt:
+            lineage_type = "Logical-OPT"
+    elif args.gprom:
+        lineage_type = "Logical-window"
+    elif args.logical_list:
+        lineage_type = "Logical-list"
     elif args.smoke:
         lineage_type = "Smoke"
     else:
         lineage_type = "Baseline"
+    
+    if args.normalized:
+        lineage_type += "_normalized"
+
     return lineage_type
 
 def relative_overhead(base, extra): # in %
@@ -63,6 +82,7 @@ def getMat(plan):
     op3 = find_node_wprefix("BATCH_CREATE_TABLE_AS", plan)
     return  plan.get(op1, 0) + plan.get(op2, 0) + plan.get(op3, 0)
 
+# DELETE
 def get_op_timings(plan, op_name):
     plan= plan.replace("'", "\"")
     plan = json.loads(plan)
@@ -71,8 +91,8 @@ def get_op_timings(plan, op_name):
 
 def gettimings(plan, res={}):
     for c in  plan['children']:
-        op_name = c['name'].strip()
-        timing = c['timing']
+        op_name = c['name'].strip() # or operator_type
+        timing = c['timing'] # or operator_timing
         res[op_name + str(len(res))] = timing
         gettimings(c, res)
     return res
@@ -88,6 +108,7 @@ def parse_plan_timings(qid):
     os.remove(plan_fname)
     return plan_timings, plan
 
+"""
 def getStats(con, q):
     q_list = "select * from duckdb_queries_list() where query = ? order by query_id desc limit 1"
     print(q_list, q)
@@ -104,10 +125,26 @@ def getStats(con, q):
     plan = query_info.loc[n, 'plan']
 
     return lineage_size, lineage_count, nchunks, postprocess_time, build_time, plan
+"""
+
+def getStats(con, q):
+    query_id = 0 #query_info.loc[n, 'query_id']
+    lineage_size = 0 # query_info.loc[n, 'size_mb']
+    lineage_count = 0 #query_info.loc[n, 'tuples_count']
+    nchunks = 0 #query_info.loc[n, 'nchunks']
+    postprocess_time = 0 #query_info.loc[n, 'postprocess_time']
+    build_time = 0 #query_info.loc[n, 'build_time']
+    plan = '' #query_info.loc[n, 'plan']
+
+    return lineage_size, lineage_count, nchunks, postprocess_time, build_time, plan
 
 def execute(Q, con, args):
     Q = " ".join(Q.split())
     if args.lineage:
+        if args.hybrid:
+            con.execute("PRAGMA enable_hybrid")
+        if args.no_persist:
+            con.execute("PRAGMA disable_persist_lineage")
         con.execute("PRAGMA enable_lineage")
     if args.smoke:
         con.execute("PRAGMA disable_filter_pushdown")
@@ -122,6 +159,10 @@ def execute(Q, con, args):
         con.execute("PRAGMA disable_profiling;")
     if args.lineage:
         con.execute("PRAGMA disable_lineage")
+        if args.hybrid:
+            con.execute("PRAGMA disable_hybrid")
+        if args.no_persist:
+            con.execute("PRAGMA enable_persist_lineage")
     if args.smoke:
         con.execute("PRAGMA disable_smoke")
         con.execute("PRAGMA enable_filter_pushdown")
@@ -133,8 +174,6 @@ def Run(q, args, con, table_name=None):
     for j in range(args.repeat-1):
         df, duration = execute(q, con, args)
         dur_acc += duration
-        if args.lineage and args.show_tables:
-            con.execute("PRAGMA clear_lineage")
         if args.lineage:
             con.execute("PRAGMA clear_lineage")
         if table_name:
@@ -284,3 +323,4 @@ legend_none = legend + theme(**{"legend.position": esc("none")})
 legend_side = legend + theme(**{
   "legend.position":esc("right"),
 })
+#"legend.spacing": "unit(-.5, 'cm')"

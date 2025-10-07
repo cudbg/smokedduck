@@ -1,4 +1,3 @@
-CREATE TABLE lineage as (
   select s_name, numwait,
          s_rid, l_rid, l_rid2, o_rid, n_rid
   from (
@@ -37,4 +36,3 @@ CREATE TABLE lineage as (
           and cb_sub1.l_rid2=l4.rowid
         )
   )  using (s_name)
-);

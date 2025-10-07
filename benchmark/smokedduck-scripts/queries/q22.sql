@@ -28,4 +28,4 @@ FROM (
 GROUP BY
     cntrycode
 ORDER BY
-    cntrycode;
+    cntrycode

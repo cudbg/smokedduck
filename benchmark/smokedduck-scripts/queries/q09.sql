@@ -27,4 +27,4 @@ GROUP BY
     o_year
 ORDER BY
     nation,
-    o_year DESC;
+    o_year DESC

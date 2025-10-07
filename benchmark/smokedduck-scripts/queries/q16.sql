@@ -26,4 +26,4 @@ ORDER BY
     supplier_cnt DESC,
     p_brand,
     p_type,
-    p_size;
+    p_size

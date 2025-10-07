@@ -1,4 +1,3 @@
-CREATE TABLE lineage AS (
   select Qbase.*, c_rid1, c_rid3, c_acctbal, avg_c_acctbal
   from (
       SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctbal
@@ -34,4 +33,3 @@ CREATE TABLE lineage AS (
           )
         ) as Qsub_plus1
   ) as Qplus using (cntrycode)
-);
